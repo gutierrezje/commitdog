@@ -37,6 +37,17 @@ const DEFAULT_CONFIG: CommitDogConfig = {
 
 const CONFIG_FILENAME = ".commitdog.yml";
 
+function validateTimeout(value: unknown): number {
+  if (
+    typeof value === "number" &&
+    Number.isInteger(value) &&
+    value > 0
+  ) {
+    return value;
+  }
+  return DEFAULT_CONFIG.timeout;
+}
+
 function findConfigPath(): string {
   // Look in current directory first, then walk up
   let dir = process.cwd();
@@ -62,6 +73,7 @@ export async function loadConfig(): Promise<CommitDogConfig> {
       ...DEFAULT_CONFIG,
       ...parsed,
       server: { ...DEFAULT_CONFIG.server, ...parsed.server },
+      timeout: validateTimeout(parsed.timeout),
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
