@@ -1,4 +1,4 @@
-import { execa, type ResultPromise } from "execa";
+import { execa } from "execa";
 import { existsSync } from "node:fs";
 import { readFile, writeFile, unlink } from "node:fs/promises";
 import { join } from "node:path";
@@ -55,7 +55,7 @@ export async function ensureServer(port: number): Promise<string> {
   }
 
   throw new Error(
-    `Failed to start OpenCode server on port ${port}. Is opencode installed? (npm i -g opencode-ai)`
+    `Failed to start OpenCode server on port ${port}. Is opencode installed? (npm i -g opencode-ai)`,
   );
 }
 
@@ -65,14 +65,13 @@ export async function ensureServer(port: number): Promise<string> {
 async function spawnServer(port: number): Promise<void> {
   const dir = await ensureCommitDogDir();
   const pidFile = join(dir, "server.pid");
-  const logFile = join(dir, "server.log");
 
   // Check if opencode is installed
   try {
     await execa("which", ["opencode"]);
   } catch {
     throw new Error(
-      "opencode not found. Install it: npm i -g opencode-ai\nSee: https://opencode.ai/docs/"
+      "opencode not found. Install it: npm i -g opencode-ai\nSee: https://opencode.ai/docs/",
     );
   }
 
@@ -109,7 +108,9 @@ export async function stopServer(): Promise<boolean> {
     // Process already dead, clean up pid file
     try {
       await unlink(pidFile);
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
     return false;
   }
 }

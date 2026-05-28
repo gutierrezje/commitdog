@@ -14,13 +14,7 @@ export interface DiffFile {
 }
 
 export async function getLastCommitDiff(): Promise<DiffResult> {
-  const { stdout: raw } = await execa("git", [
-    "show",
-    "--format=",
-    "--stat",
-    "--patch",
-    "HEAD",
-  ]);
+  const { stdout: raw } = await execa("git", ["show", "--format=", "--stat", "--patch", "HEAD"]);
   return parseDiff(raw);
 }
 
@@ -28,25 +22,16 @@ export async function getLastCommitDiff(): Promise<DiffResult> {
  * Get the diff for staged changes
  */
 export async function getStagedDiff(): Promise<DiffResult> {
-  const { stdout: raw } = await execa("git", [
-    "diff",
-    "--staged",
-    "--stat",
-    "--patch",
-  ]);
+  const { stdout: raw } = await execa("git", ["diff", "--staged", "--stat", "--patch"]);
   return parseDiff(raw);
 }
 
 /**
  * Get the diff summary (just file names and stats) for display purposes
  */
-export async function getDiffSummary(
-  mode: "last" | "staged"
-): Promise<string> {
+export async function getDiffSummary(mode: "last" | "staged"): Promise<string> {
   const args =
-    mode === "staged"
-      ? ["diff", "--staged", "--stat"]
-      : ["show", "--format=", "--stat", "HEAD"];
+    mode === "staged" ? ["diff", "--staged", "--stat"] : ["show", "--format=", "--stat", "HEAD"];
   const { stdout } = await execa("git", args);
   return stdout;
 }
@@ -55,11 +40,7 @@ export async function getDiffSummary(
  * Get the commit message for the last commit
  */
 export async function getLastCommitMessage(): Promise<string> {
-  const { stdout } = await execa("git", [
-    "log",
-    "-1",
-    "--format=%s",
-  ]);
+  const { stdout } = await execa("git", ["log", "-1", "--format=%s"]);
   return stdout.trim();
 }
 
@@ -67,11 +48,7 @@ export async function getLastCommitMessage(): Promise<string> {
  * Get the short SHA of the last commit
  */
 export async function getLastCommitSha(): Promise<string> {
-  const { stdout } = await execa("git", [
-    "log",
-    "-1",
-    "--format=%h",
-  ]);
+  const { stdout } = await execa("git", ["log", "-1", "--format=%h"]);
   return stdout.trim();
 }
 
@@ -145,10 +122,7 @@ function parseDiff(raw: string): DiffResult {
   }
 
   const summary = files
-    .map(
-      (f) =>
-        `${statusSymbol(f.status)} ${f.path} (+${f.additions}/-${f.deletions})`
-    )
+    .map((f) => `${statusSymbol(f.status)} ${f.path} (+${f.additions}/-${f.deletions})`)
     .join("\n");
 
   return { files, raw, summary };

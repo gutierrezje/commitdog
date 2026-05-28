@@ -52,21 +52,14 @@ export async function uninstallHook(): Promise<boolean> {
   // If the entire file is our hook, remove it
   const lines = content.split("\n");
   const ourStart = lines.findIndex((l) => l.includes(HOOK_MARKER));
-  const ourEnd = lines.findIndex(
-    (l, i) => i > ourStart && l.includes("# end-commitdog")
-  );
+  const ourEnd = lines.findIndex((l, i) => i > ourStart && l.includes("# end-commitdog"));
 
   if (ourStart === 0 && (ourEnd === -1 || ourEnd === lines.length - 1)) {
     // Whole file is ours
     await unlink(hookPath);
   } else {
     // Remove just our section
-    const cleaned = [
-      ...lines.slice(0, ourStart),
-      ...lines.slice(ourEnd + 1),
-    ]
-      .join("\n")
-      .trim();
+    const cleaned = [...lines.slice(0, ourStart), ...lines.slice(ourEnd + 1)].join("\n").trim();
     if (cleaned === "#!/bin/sh" || cleaned === "") {
       await unlink(hookPath);
     } else {

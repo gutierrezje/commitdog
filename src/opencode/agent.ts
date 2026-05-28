@@ -53,12 +53,12 @@ export function buildReviewPrompt(
   mode: "last-commit" | "staged",
   customRules: string[],
   include?: string[],
-  exclude?: string[]
+  exclude?: string[],
 ): string {
   const modeInstruction =
     mode === "staged"
       ? "Review the currently staged changes (run `git diff --staged` to see them)."
-      : "Review the last commit (run `git diff HEAD~1..HEAD` to see the changes, and `git log -1` for the commit message).";
+      : "Review the last commit (run `git show --format= --stat --patch HEAD` to see the changes, and `git log -1` for the commit message).";
 
   let prompt = `${modeInstruction}
 

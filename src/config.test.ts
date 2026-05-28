@@ -33,7 +33,7 @@ describe("config", () => {
         "exclude: []",
         "rules: []",
       ].join("\n"),
-      "utf-8"
+      "utf-8",
     );
 
     process.chdir(child);

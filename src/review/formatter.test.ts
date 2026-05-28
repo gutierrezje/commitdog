@@ -11,6 +11,14 @@ describe("colorizeMarkdown", () => {
     expect(output).not.toContain("**");
   });
 
+  it("formats severity lines that include file references", () => {
+    const output = colorizeMarkdown("**[ERROR] src/config.ts:45**\nDescription");
+
+    expect(output).toContain("[ERROR]");
+    expect(output).toContain(" src/config.ts:45");
+    expect(output).not.toContain("**");
+  });
+
   it("formats regular bold markdown without leaking replacement tokens", () => {
     const output = colorizeMarkdown("Review **this file** please");
 

@@ -19,7 +19,6 @@ export async function runReview(options: ReviewOptions): Promise<string> {
   const port = config.server.port;
 
   let client;
-  let cleanup: (() => void) | undefined;
 
   // Try to connect to existing server, otherwise start one via SDK
   if (await isServerRunning(port)) {
@@ -29,130 +28,119 @@ export async function runReview(options: ReviewOptions): Promise<string> {
   } else {
     const oc = await createOpencode({ port });
     client = oc.client;
-    cleanup = oc.server.close;
   }
 
-  try {
-    // Create a new session for this review
-    const session = await client.session.create({
-      body: {},
-    });
-    const sessionId = (session.data as any).id;
+  // Create a new session for this review
+  const session = await client.session.create({
+    body: {},
+  });
+  const sessionId = (session.data as any).id;
 
-    // Build the review prompt
-    const prompt = buildReviewPrompt(mode, config.rules, config.include, config.exclude);
+  // Build the review prompt
+  const prompt = buildReviewPrompt(mode, config.rules, config.include, config.exclude);
 
-    // Parse the model string (e.g. "anthropic/claude-sonnet-4-20250514")
-    const parts = config.model.split("/");
-    const providerID = parts[0];
-    const modelID = parts.slice(1).join("/");
+  // Parse the model string (e.g. "anthropic/claude-sonnet-4-20250514")
+  const parts = config.model.split("/");
+  const providerID = parts[0];
+  const modelID = parts.slice(1).join("/");
 
-    // Set up SSE event listener to stream output
-    let fullResponse = "";
-    const responsePromise = new Promise<string>(async (resolve, reject) => {
-      let settled = false;
+  // Set up SSE event listener to stream output
+  let fullResponse = "";
+  const sseResult = await client.global.event();
+  const responsePromise = new Promise<string>((resolve, reject) => {
+    let settled = false;
 
+    // Safety timeout: 5 minutes
+    const safetyTimeout = setTimeout(
+      () => {
+        if (!settled) {
+          settled = true;
+          resolve(fullResponse || "Review timed out.");
+        }
+      },
+      5 * 60 * 1000,
+    );
+
+    (async () => {
       try {
-        const sseResult = await client.global.event();
-        
-        // Safety timeout: 5 minutes
-        const safetyTimeout = setTimeout(() => {
-          if (!settled) {
-            settled = true;
-            resolve(fullResponse || "Review timed out.");
-          }
-        }, 5 * 60 * 1000);
+        for await (const event of sseResult.stream) {
+          if (settled) break;
 
-        (async () => {
-          try {
-            for await (const event of sseResult.stream) {
-              if (settled) break;
+          const payload = (event as any).payload;
+          if (!payload) continue;
 
-              const payload = (event as any).payload;
-              if (!payload) continue;
-
-              // Look for message part updates from our session
-              if (
-                payload.type === "message.part.updated" &&
-                payload.properties?.part?.sessionID === sessionId
-              ) {
-                const text = payload.properties?.part?.text;
-                if (text && typeof text === "string") {
-                  // Ignore user prompt parts
-                  if (text.startsWith(prompt.substring(0, 30))) {
-                    continue;
-                  }
-                  const delta = text.slice(fullResponse.length);
-                  if (delta) {
-                    fullResponse = text;
-                    onChunk?.(delta);
-                  }
-                }
+          // Look for message part updates from our session
+          if (
+            payload.type === "message.part.updated" &&
+            payload.properties?.part?.sessionID === sessionId
+          ) {
+            const text = payload.properties?.part?.text;
+            if (text && typeof text === "string") {
+              // Ignore user prompt parts
+              if (text.startsWith(prompt.substring(0, 30))) {
+                continue;
               }
-
-              // Also check for message error
-              if (
-                payload.type === "message.updated" &&
-                payload.properties?.info?.sessionID === sessionId
-              ) {
-                const msg = payload.properties?.info;
-                if (msg?.role === "assistant" && msg.error) {
-                  if (!settled) {
-                    settled = true;
-                    clearTimeout(safetyTimeout);
-                    reject(new Error(msg.error.data?.message || "Review failed"));
-                    break;
-                  }
-                }
-              }
-
-              // Check for session going completely idle
-              if (
-                payload.type === "session.idle" &&
-                payload.properties?.sessionID === sessionId &&
-                fullResponse.length > 0
-              ) {
-                if (!settled) {
-                  settled = true;
-                  clearTimeout(safetyTimeout);
-                  resolve(fullResponse);
-                  break;
-                }
+              const delta = text.slice(fullResponse.length);
+              if (delta) {
+                fullResponse = text;
+                onChunk?.(delta);
               }
             }
-          } catch (streamErr) {
+          }
+
+          // Also check for message error
+          if (
+            payload.type === "message.updated" &&
+            payload.properties?.info?.sessionID === sessionId
+          ) {
+            const msg = payload.properties?.info;
+            if (msg?.role === "assistant" && msg.error) {
+              if (!settled) {
+                settled = true;
+                clearTimeout(safetyTimeout);
+                reject(new Error(msg.error.data?.message || "Review failed"));
+                break;
+              }
+            }
+          }
+
+          // Check for session going completely idle
+          if (
+            payload.type === "session.idle" &&
+            payload.properties?.sessionID === sessionId &&
+            fullResponse.length > 0
+          ) {
             if (!settled) {
               settled = true;
               clearTimeout(safetyTimeout);
-              reject(streamErr);
+              resolve(fullResponse);
+              break;
             }
           }
-        })();
-      } catch (err) {
+        }
+      } catch (streamErr) {
         if (!settled) {
           settled = true;
-          reject(err);
+          clearTimeout(safetyTimeout);
+          reject(streamErr);
         }
       }
-    });
+    })();
+  });
 
-    // Send the review prompt
-    await client.session.prompt({
-      path: { id: sessionId },
-      body: {
-        system: REVIEW_AGENT_PROMPT,
-        model: { providerID, modelID },
-        parts: [{ type: "text", text: prompt }],
-      },
-    });
+  // Send the review prompt
+  await client.session.prompt({
+    path: { id: sessionId },
+    body: {
+      system: REVIEW_AGENT_PROMPT,
+      model: { providerID, modelID },
+      parts: [{ type: "text", text: prompt }],
+    },
+  });
 
-    const result = await responsePromise;
-    options.onComplete?.(result);
-    return result;
-  } finally {
-    // Don't cleanup the server — leave it running for future reviews
-    // cleanup?.();
-  }
+  const result = await responsePromise;
+  options.onComplete?.(result);
+  return result;
 }
 
 /**
@@ -200,8 +188,7 @@ export async function getAvailableModels(port: number): Promise<string[]> {
     }
 
     return modelsList.sort();
-  } catch (err) {
+  } catch {
     return [];
   }
 }
-

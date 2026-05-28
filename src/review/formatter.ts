@@ -83,17 +83,21 @@ export function printFooter(review: string, reportPath?: string): void {
  */
 export function colorizeMarkdown(text: string): string {
   return text
-    .replace(/\*\*\[(ERROR)\]\*\*/g, (_match, label: string) =>
-      chalk.red.bold(`[${label}]`)
-    )
-    .replace(/\*\*\[(WARNING)\]\*\*/g, (_match, label: string) =>
-      chalk.yellow.bold(`[${label}]`)
-    )
-    .replace(/\*\*\[(INFO)\]\*\*/g, (_match, label: string) =>
-      chalk.blue.bold(`[${label}]`)
+    .replace(
+      /\*\*\[(ERROR|WARNING|INFO)\]([^*]*)\*\*/g,
+      (_match, label: string, rest: string) => `${colorizeSeverity(label)}${chalk.bold(rest)}`,
     )
     .replace(/### (.*)/g, (_match, title: string) => chalk.bold.underline(title))
-    .replace(/\*\*([^*]+)\*\*/g, (_match, content: string) =>
-      chalk.bold(content)
-    );
+    .replace(/\*\*([^*]+)\*\*/g, (_match, content: string) => chalk.bold(content));
+}
+
+function colorizeSeverity(label: string): string {
+  switch (label) {
+    case "ERROR":
+      return chalk.red.bold(`[${label}]`);
+    case "WARNING":
+      return chalk.yellow.bold(`[${label}]`);
+    default:
+      return chalk.blue.bold(`[${label}]`);
+  }
 }

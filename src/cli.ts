@@ -4,17 +4,12 @@ import { Command } from "commander";
 import chalk from "chalk";
 import ora from "ora";
 import { createInterface } from "node:readline/promises";
-import { loadConfig, saveConfig, configExists } from "./config.js";
+import { loadConfig, saveConfig, configExists, type CommitDogConfig } from "./config.js";
 import { runReview, getAvailableModels } from "./opencode/client.js";
 import { ensureServer, isServerRunning, stopServer } from "./opencode/server.js";
 import { installHook, uninstallHook, isHookInstalled } from "./git/hooks.js";
 import { isGitRepo, hasCommits, getStagedDiff } from "./git/diff.js";
-import {
-  printHeader,
-  printChunk,
-  printFooter,
-  writeMarkdownReport,
-} from "./review/formatter.js";
+import { printHeader, printChunk, printFooter, writeMarkdownReport } from "./review/formatter.js";
 
 const program = new Command();
 
@@ -42,7 +37,7 @@ program
       await runInit();
     }
 
-    const config = await loadConfig();
+    const config = await loadConfigOrExit();
     const mode = options.staged ? "staged" : "last-commit";
 
     if (mode === "last-commit" && !(await hasCommits())) {
@@ -104,14 +99,14 @@ program
 async function runInit() {
   console.log(chalk.bold("CommitDog Setup\n"));
 
-  const config = await loadConfig();
+  const config = await loadConfigOrExit();
 
   const spinner = ora("Querying available models from OpenCode...").start();
   let models: string[] = [];
   try {
     models = await getAvailableModels(config.server.port);
     spinner.stop();
-  } catch (err) {
+  } catch {
     spinner.fail("Failed to query models from OpenCode server.");
   }
 
@@ -132,7 +127,7 @@ async function runInit() {
     try {
       while (true) {
         const answer = await rl.question(
-          chalk.yellow(`Select a model number (1-${models.length}) [default: 1]: `)
+          chalk.yellow(`Select a model number (1-${models.length}) [default: 1]: `),
         );
         const trimmed = answer.trim();
         if (trimmed === "") {
@@ -151,7 +146,11 @@ async function runInit() {
     }
   } else {
     console.log(chalk.yellow("No active/connected providers found in OpenCode."));
-    console.log(chalk.dim("Make sure you run ") + chalk.cyan("opencode") + chalk.dim(" to authenticate and set up your providers/keys first."));
+    console.log(
+      chalk.dim("Make sure you run ") +
+        chalk.cyan("opencode") +
+        chalk.dim(" to authenticate and set up your providers/keys first."),
+    );
     console.log(chalk.dim("Using fallback default model: ") + chalk.cyan(config.model));
     console.log();
   }
@@ -169,17 +168,17 @@ program
   .description("View or change the AI model")
   .argument("[model]", "Model to use (e.g., github-copilot/claude-sonnet-4.5)")
   .action(async (model?: string) => {
-    const config = await loadConfig();
+    const config = await loadConfigOrExit();
 
     if (!model) {
       console.log(chalk.bold("Current model: ") + chalk.cyan(config.model));
-      
+
       const spinner = ora("Querying available models from OpenCode...").start();
       let models: string[] = [];
       try {
         models = await getAvailableModels(config.server.port);
         spinner.stop();
-      } catch (err) {
+      } catch {
         spinner.fail("Failed to query models from OpenCode server.");
       }
 
@@ -198,7 +197,9 @@ program
         try {
           while (true) {
             const answer = await rl.question(
-              chalk.yellow(`Select a model number (1-${models.length}) or press Enter to keep current: `)
+              chalk.yellow(
+                `Select a model number (1-${models.length}) or press Enter to keep current: `,
+              ),
             );
             const trimmed = answer.trim();
             if (trimmed === "") {
@@ -231,9 +232,7 @@ program
   });
 
 // Hook commands
-const hookCmd = program
-  .command("hook")
-  .description("Manage git hooks");
+const hookCmd = program.command("hook").description("Manage git hooks");
 
 hookCmd
   .command("install")
@@ -266,15 +265,13 @@ hookCmd
   });
 
 // Server commands
-const serverCmd = program
-  .command("server")
-  .description("Manage the OpenCode server");
+const serverCmd = program.command("server").description("Manage the OpenCode server");
 
 serverCmd
   .command("start")
   .description("Start the OpenCode server")
   .action(async () => {
-    const config = await loadConfig();
+    const config = await loadConfigOrExit();
     const spinner = ora("Starting OpenCode server...").start();
     try {
       const url = await ensureServer(config.server.port);
@@ -300,7 +297,7 @@ serverCmd
   .command("status")
   .description("Check if the OpenCode server is running")
   .action(async () => {
-    const config = await loadConfig();
+    const config = await loadConfigOrExit();
     const running = await isServerRunning(config.server.port);
     if (running) {
       console.log(chalk.green(`✓ Server running on port ${config.server.port}`));
@@ -310,3 +307,13 @@ serverCmd
   });
 
 program.parse();
+
+async function loadConfigOrExit(): Promise<CommitDogConfig> {
+  try {
+    return await loadConfig();
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(chalk.red(`Config error: ${message}`));
+    process.exit(1);
+  }
+}

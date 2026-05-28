@@ -42,6 +42,7 @@ npm run build
 ```
 
 Link the package globally:
+
 ```bash
 npm link
 ```
@@ -55,6 +56,7 @@ commitdog init
 ```
 
 This will:
+
 1. Start an OpenCode server (if not already running).
 2. Fetch your connected providers and active models.
 3. Allow you to select a model interactively.
@@ -65,7 +67,9 @@ This will:
 ## CLI Reference
 
 ### `commitdog` (or `commitdog review`)
+
 Runs a code review on your repository.
+
 - **Default**: Reviews the changes in the **last commit**.
 - `--staged`: Reviews currently **staged changes** instead of the last commit.
 - `--hook`: Runs in background, non-blocking mode (used by Git hook).
@@ -79,7 +83,9 @@ commitdog review --staged
 ```
 
 ### `commitdog model`
+
 View or interactively change the active AI model.
+
 ```bash
 # Interactively pick a model
 commitdog model
@@ -89,7 +95,9 @@ commitdog model github-copilot/claude-sonnet-4.5
 ```
 
 ### `commitdog hook install | uninstall`
+
 Installs or removes the post-commit Git hook.
+
 ```bash
 # Install non-blocking post-commit review hook
 commitdog hook install
@@ -99,7 +107,9 @@ commitdog hook uninstall
 ```
 
 ### `commitdog server start | stop | status`
+
 Manually manage the OpenCode server lifecycle.
+
 ```bash
 # Check if OpenCode serve is running
 commitdog server status
@@ -118,6 +128,7 @@ commitdog server stop
 You can set CommitDog up with a hook system so it runs automatically in the background after you commit. For example, to use is with Husky, follow these steps:
 
 ### 1. Install & Initialize Husky
+
 If Husky is not already configured in your project, install it and run the initialization:
 
 ```bash
@@ -126,13 +137,14 @@ npx husky init
 ```
 
 ### 2. Configure the post-commit Hook
+
 Create or edit the `post-commit` hook in your `.husky/` directory to execute CommitDog in background mode:
 
 ```bash
 echo "commitdog review --hook &" > .husky/post-commit
 ```
 
-*Note: The trailing `&` is required. It forks the `commitdog` process into the background, returning control to your terminal instantly so your `git commit` completes without delay.*
+_Note: The trailing `&` is required. It forks the `commitdog` process into the background, returning control to your terminal instantly so your `git commit` completes without delay._
 
 ---
 
