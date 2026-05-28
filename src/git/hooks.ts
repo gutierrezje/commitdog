@@ -74,6 +74,58 @@ export async function isHookInstalled(): Promise<boolean> {
   return content.includes(HOOK_MARKER);
 }
 
+export interface HookStatus {
+  installed: boolean;
+  stale: boolean;
+  reason?: string;
+}
+
+/**
+ * Check if the installed hook matches what the current generator would produce.
+ * Returns stale=true if the managed section differs (e.g., missing --quick flag,
+ * outdated binary path, or changed script logic).
+ */
+export async function checkHookStale(): Promise<HookStatus> {
+  const hooksDir = await getHooksDir();
+  const hookPath = join(hooksDir, "post-commit");
+
+  if (!existsSync(hookPath)) {
+    return { installed: false, stale: false, reason: "No post-commit hook found" };
+  }
+
+  const content = await readFile(hookPath, "utf-8");
+  if (!content.includes(HOOK_MARKER)) {
+    return { installed: false, stale: false, reason: "Hook exists but is not commitdog-managed" };
+  }
+
+  const command = await resolveHookCommand();
+  const expected = generateManagedSection(command);
+  const actual = extractManagedSection(content);
+
+  if (!actual) {
+    return { installed: true, stale: true, reason: "Could not extract managed section" };
+  }
+
+  if (actual.trim() !== expected.trim()) {
+    return { installed: true, stale: true, reason: "Managed section differs from current generator" };
+  }
+
+  return { installed: true, stale: false };
+}
+
+function extractManagedSection(content: string): string | undefined {
+  const lines = content.split("\n");
+  const ourStart = lines.findIndex((line) => line.includes(HOOK_MARKER));
+  if (ourStart === -1) return undefined;
+
+  const ourEnd = lines.findIndex(
+    (line, index) => index > ourStart && line.includes(HOOK_END_MARKER),
+  );
+  if (ourEnd === -1) return undefined;
+
+  return lines.slice(ourStart, ourEnd + 1).join("\n");
+}
+
 interface HookCommand {
   commitdog: string;
 }

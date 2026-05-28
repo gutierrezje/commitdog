@@ -13,7 +13,7 @@ import {
   type ReviewTiming,
 } from "./opencode/client.js";
 import { ensureServer, isServerRunning, stopServer } from "./opencode/server.js";
-import { installHook, uninstallHook, isHookInstalled } from "./git/hooks.js";
+import { installHook, uninstallHook, isHookInstalled, checkHookStale } from "./git/hooks.js";
 import { isGitRepo, hasCommits } from "./git/diff.js";
 import { buildReviewContext, renderReviewContext } from "./review/context.js";
 import {
@@ -345,6 +345,27 @@ hookCmd
     console.log(
       chalk.dim("Hook output: .commitdog/hook.log; latest report: .commitdog/reviews/latest.md"),
     );
+  });
+
+hookCmd
+  .command("status")
+  .description("Check if the post-commit hook is installed and up to date")
+  .action(async () => {
+    const status = await checkHookStale();
+
+    if (!status.installed) {
+      console.log(chalk.yellow(`✗ ${status.reason ?? "Hook not installed"}`));
+      return;
+    }
+
+    if (status.stale) {
+      console.log(chalk.yellow("⚠ Hook is installed but stale"));
+      console.log(chalk.dim(`Reason: ${status.reason}`));
+      console.log(chalk.dim("Run `commitdog hook install` to update it."));
+      return;
+    }
+
+    console.log(chalk.green("✓ Hook is installed and up to date"));
   });
 
 hookCmd

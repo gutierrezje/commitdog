@@ -144,12 +144,12 @@ export async function runReview(options: ReviewOptions): Promise<ReviewReport> {
       return false;
     };
 
-    // Safety timeout: 5 minutes
+    // Safety timeout from config (default 5 minutes)
     safetyTimeout = setTimeout(
       () => {
         settle("reject", new Error("Review timed out."));
       },
-      5 * 60 * 1000,
+      config.timeout * 1000,
     );
 
     (async () => {

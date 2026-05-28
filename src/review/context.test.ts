@@ -21,6 +21,7 @@ const config: CommitDogConfig = {
     port: 4096,
     auto_start: true,
   },
+  timeout: 300,
   include: ["**/*"],
   exclude: [],
   rules: [],

@@ -9,6 +9,7 @@ export interface CommitDogConfig {
     port: number;
     auto_start: boolean;
   };
+  timeout: number; // seconds
   include: string[];
   exclude: string[];
   rules: string[];
@@ -20,6 +21,7 @@ const DEFAULT_CONFIG: CommitDogConfig = {
     port: 4096,
     auto_start: true,
   },
+  timeout: 300, // 5 minutes
   include: ["**/*"],
   exclude: [
     "**/*.test.*",
