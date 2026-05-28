@@ -77,7 +77,7 @@ async function spawnServer(port: number): Promise<void> {
 
   const subprocess = execa("opencode", ["serve", "--port", String(port)], {
     detached: true,
-    stdio: ["ignore", "pipe", "pipe"],
+    stdio: "ignore",
     cleanup: false,
   });
 

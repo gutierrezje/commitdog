@@ -246,13 +246,10 @@ hookCmd
       process.exit(1);
     }
 
-    if (await isHookInstalled()) {
-      console.log(chalk.yellow("Hook already installed"));
-      return;
-    }
-
+    const alreadyInstalled = await isHookInstalled();
     const hookPath = await installHook();
-    console.log(chalk.green(`✓ Post-commit hook installed: ${hookPath}`));
+    const action = alreadyInstalled ? "updated" : "installed";
+    console.log(chalk.green(`✓ Post-commit hook ${action}: ${hookPath}`));
     console.log(chalk.dim("Reviews will run automatically after each commit (non-blocking)"));
   });
 
