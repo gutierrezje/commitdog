@@ -24,6 +24,10 @@ export function renderMarkdown(report: ReviewReport): string {
       lines.push(`**[${finding.severity.toUpperCase()}] ${finding.file}:${finding.line}**`);
       lines.push(finding.title.trim());
       lines.push("");
+      if (finding.evidence) {
+        lines.push(`> **Evidence:** \`${finding.evidence.trim()}\``);
+        lines.push("");
+      }
       lines.push(finding.body.trim());
       lines.push("");
     }

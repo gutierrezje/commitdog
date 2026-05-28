@@ -18,6 +18,7 @@ You MAY think step-by-step internally, but your VISIBLE output must follow this 
       "severity": "error" | "warning" | "info",
       "file": "relative/path/from/repo/root.ts",
       "line": 123,
+      "evidence": "Quote the exact 1-2 lines of code showing the concern",
       "title": "Short, specific issue title",
       "body": "Concrete description of the problem, its impact, and a focused suggestion for how to fix it.",
       "confidence": "high" | "medium" | "low"
@@ -35,6 +36,7 @@ Semantics and constraints:
   - "info" — Non-blocking suggestions that are clearly improvements but may be subjective or low risk.
 - "file": must be a path that exists in the repository and that is relevant to the diff you inspected.
 - "line": the 1-based line number in that file that best anchors the issue (usually the first changed line or the line where the problem manifests).
+- "evidence": Quote the exact 1-2 lines of code showing the concern. If you cannot quote exact code lines supporting your finding, you MUST downgrade the confidence to "low".
 - "title": one short sentence fragment that could be used as a PR comment subject line.
 - "body": 2-6 sentences that describe:
   1) what is wrong,
@@ -47,7 +49,7 @@ Semantics and constraints:
 
 Review rules:
 - Focus on substantive issues: bugs, security, logic errors, edge cases, error handling, performance.
-- Prefer high-confidence findings. Use "medium" or "low" confidence only when clearly labeled and avoid flooding the findings list with speculation.
+- Prefer high-confidence findings. If you are speculating, label it "low" confidence. If you are uncertain but see a real risk, label it "medium". Only use "high" when the issue is clearly present in the visible code.
 - Do NOT nitpick formatting, naming style, or cosmetic preferences.
 - Do NOT suggest changes that would alter behavior without a clear, justified benefit.
 - It is OK for "findings" to be an empty array if you see no meaningful issues.

@@ -11,6 +11,7 @@ export interface ReviewFinding {
   severity: ReviewSeverity;
   file: string;
   line: number;
+  evidence?: string;
   title: string;
   body: string;
   confidence: ReviewConfidence;
@@ -393,6 +394,7 @@ export function parseStructuredReview(raw: string): ReviewReport {
     const severityRaw = String(item.severity ?? "").toLowerCase();
     const file = typeof item.file === "string" ? item.file : "";
     const line = Number.isFinite(item.line) ? Number(item.line) : NaN;
+    const evidence = typeof item.evidence === "string" ? item.evidence : undefined;
     const title = typeof item.title === "string" ? item.title : "";
     const body = typeof item.body === "string" ? item.body : "";
     const confidenceRaw = String(item.confidence ?? "").toLowerCase();
@@ -420,6 +422,7 @@ export function parseStructuredReview(raw: string): ReviewReport {
       severity: severityRaw as ReviewSeverity,
       file,
       line,
+      evidence,
       title,
       body,
       confidence,

@@ -11,6 +11,7 @@ import {
   type ReviewProgressEvent,
   type ReviewReport,
   type ReviewTiming,
+  type ReviewFinding,
 } from "./opencode/client.js";
 import { ensureServer, isServerRunning, stopServer } from "./opencode/server.js";
 import {
@@ -60,6 +61,7 @@ program
   .option("--staged", "Review staged changes instead of last commit")
   .option("--hook", "Running from git hook (non-blocking mode)")
   .option("--quick", "Use a smaller local-only review prompt")
+  .option("--min-confidence <level>", "Minimum confidence level to report (low, medium, high)", "medium")
   .action(async (options) => {
     const totalStart = performance.now();
     const timings: ReviewTiming[] = [];
@@ -144,6 +146,17 @@ program
       recordCliTiming(timings, "review-run", "OpenCode review run", reviewStart);
       spinner.succeed("Review complete.");
       console.log(); // Space after spinner
+
+      // Filter findings by confidence
+      const minConfidence = (options.minConfidence as string | undefined) ?? "medium";
+      report.findings = filterFindingsByConfidence(report.findings, minConfidence);
+
+      // Filter findings by changed lines (anchoring: only keep if line is in diff hunks, or confidence is high)
+      const changedLinesMap = new Map<string, number[]>();
+      for (const file of reviewContext.changedFiles) {
+        changedLinesMap.set(file.file.path, file.changedLines);
+      }
+      report.findings = filterFindingsByChangedLines(report.findings, changedLinesMap);
 
       const renderStart = performance.now();
       const markdown = renderMarkdown(report);
@@ -467,4 +480,31 @@ async function loadConfigOrExit(): Promise<CommitDogConfig> {
     console.error(chalk.red(`Config error: ${message}`));
     process.exit(1);
   }
+}
+
+function filterFindingsByConfidence(findings: ReviewFinding[], minConfidence: string): ReviewFinding[] {
+  const levels = ["low", "medium", "high"];
+  const minIndex = levels.indexOf(minConfidence.toLowerCase());
+  if (minIndex === -1) return findings;
+
+  return findings.filter((f) => {
+    const idx = levels.indexOf(f.confidence.toLowerCase());
+    return idx >= minIndex;
+  });
+}
+
+function filterFindingsByChangedLines(findings: ReviewFinding[], changedLines: Map<string, number[]>): ReviewFinding[] {
+  return findings.filter((f) => {
+    const fileLines = changedLines.get(f.file);
+    if (!fileLines) {
+      // If the file wasn't changed in this diff at all, it's a hallucinated file.
+      // We only keep it if the AI is extremely confident.
+      return f.confidence === "high";
+    }
+    // If the specific line wasn't modified in the diff hunks, discard it unless it's high confidence.
+    if (!fileLines.includes(f.line)) {
+      return f.confidence === "high";
+    }
+    return true;
+  });
 }
