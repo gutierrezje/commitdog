@@ -213,7 +213,7 @@ function unescapePath(content: string): string {
     let path = "";
     let i = 1;
     while (i < content.length - 1) {
-      if (content[i] === "\\" && i + 1 < content.length) {
+      if (content[i] === "\\" && i + 1 < content.length - 1) {
         path += content[i + 1] ?? "";
         i += 2;
       } else {
