@@ -51,7 +51,9 @@ Brief mention of things done well (good patterns, clean code, etc). Keep it shor
  */
 export function buildReviewPrompt(
   mode: "last-commit" | "staged",
-  customRules: string[]
+  customRules: string[],
+  include?: string[],
+  exclude?: string[]
 ): string {
   const modeInstruction =
     mode === "staged"
@@ -66,6 +68,14 @@ Use your tools to:
 3. Check related files if needed to understand impact
 
 Then provide your review following the format in your instructions.`;
+
+  if (include && include.length > 0 && !(include.length === 1 && include[0] === "**/*")) {
+    prompt += `\n\nOnly review files that match these patterns: ${include.join(", ")}`;
+  }
+
+  if (exclude && exclude.length > 0) {
+    prompt += `\n\nIgnore and do NOT review files that match these patterns: ${exclude.join(", ")}`;
+  }
 
   if (customRules.length > 0) {
     prompt += `\n\nAdditional review rules for this project:\n${customRules.map((r) => `- ${r}`).join("\n")}`;

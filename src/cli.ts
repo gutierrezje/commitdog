@@ -3,8 +3,9 @@
 import { Command } from "commander";
 import chalk from "chalk";
 import ora from "ora";
+import { createInterface } from "node:readline/promises";
 import { loadConfig, saveConfig, configExists } from "./config.js";
-import { runReview } from "./opencode/client.js";
+import { runReview, getAvailableModels } from "./opencode/client.js";
 import { ensureServer, isServerRunning, stopServer } from "./opencode/server.js";
 import { installHook, uninstallHook, isHookInstalled } from "./git/hooks.js";
 import { isGitRepo, hasCommits, getStagedDiff } from "./git/diff.js";
@@ -103,16 +104,62 @@ program
 async function runInit() {
   console.log(chalk.bold("🐕 CommitDog Setup\n"));
 
-  // For now, use a default model. In v2, we'll query OpenCode for available models.
   const config = await loadConfig();
 
-  // Prompt-like output (we'll make this interactive with inquirer later)
-  console.log(chalk.dim("Using default model: ") + chalk.cyan(config.model));
-  console.log(chalk.dim("Change later with: ") + chalk.cyan("commitdog model"));
-  console.log();
+  const spinner = ora("Querying available models from OpenCode...").start();
+  let models: string[] = [];
+  try {
+    models = await getAvailableModels(config.server.port);
+    spinner.stop();
+  } catch (err) {
+    spinner.fail("Failed to query models from OpenCode server.");
+  }
 
+  let selectedModel = config.model;
+
+  if (models.length > 0) {
+    console.log(chalk.bold("Available models configured in OpenCode:"));
+    models.forEach((m, idx) => {
+      console.log(`  ${chalk.cyan(idx + 1)}. ${m}`);
+    });
+    console.log();
+
+    const rl = createInterface({
+      input: process.stdin,
+      output: process.stdout,
+    });
+
+    try {
+      while (true) {
+        const answer = await rl.question(
+          chalk.yellow(`Select a model number (1-${models.length}) [default: 1]: `)
+        );
+        const trimmed = answer.trim();
+        if (trimmed === "") {
+          selectedModel = models[0];
+          break;
+        }
+        const num = parseInt(trimmed, 10);
+        if (num >= 1 && num <= models.length) {
+          selectedModel = models[num - 1];
+          break;
+        }
+        console.log(chalk.red("Invalid selection. Please enter a valid number."));
+      }
+    } finally {
+      rl.close();
+    }
+  } else {
+    console.log(chalk.yellow("No active/connected providers found in OpenCode."));
+    console.log(chalk.dim("Make sure you run ") + chalk.cyan("opencode") + chalk.dim(" to authenticate and set up your providers/keys first."));
+    console.log(chalk.dim("Using fallback default model: ") + chalk.cyan(config.model));
+    console.log();
+  }
+
+  config.model = selectedModel;
   const configPath = await saveConfig(config);
   console.log(chalk.green(`✓ Config saved to ${configPath}`));
+  console.log(chalk.dim(`Model set to: `) + chalk.cyan(selectedModel));
   console.log();
 }
 
@@ -120,14 +167,60 @@ async function runInit() {
 program
   .command("model")
   .description("View or change the AI model")
-  .argument("[model]", "Model to use (e.g., anthropic/claude-sonnet-4-20250514)")
+  .argument("[model]", "Model to use (e.g., github-copilot/claude-sonnet-4.5)")
   .action(async (model?: string) => {
     const config = await loadConfig();
 
     if (!model) {
       console.log(chalk.bold("Current model: ") + chalk.cyan(config.model));
-      console.log(chalk.dim("\nChange with: commitdog model <provider/model>"));
-      console.log(chalk.dim("Example: commitdog model openai/gpt-4o"));
+      
+      const spinner = ora("Querying available models from OpenCode...").start();
+      let models: string[] = [];
+      try {
+        models = await getAvailableModels(config.server.port);
+        spinner.stop();
+      } catch (err) {
+        spinner.fail("Failed to query models from OpenCode server.");
+      }
+
+      if (models.length > 0) {
+        console.log(chalk.bold("\nAvailable models configured in OpenCode:"));
+        models.forEach((m, idx) => {
+          console.log(`  ${chalk.cyan(idx + 1)}. ${m}`);
+        });
+        console.log();
+
+        const rl = createInterface({
+          input: process.stdin,
+          output: process.stdout,
+        });
+
+        try {
+          while (true) {
+            const answer = await rl.question(
+              chalk.yellow(`Select a model number (1-${models.length}) or press Enter to keep current: `)
+            );
+            const trimmed = answer.trim();
+            if (trimmed === "") {
+              break; // Keep current model
+            }
+            const num = parseInt(trimmed, 10);
+            if (num >= 1 && num <= models.length) {
+              const newModel = models[num - 1];
+              config.model = newModel;
+              await saveConfig(config);
+              console.log(chalk.green(`✓ Model set to ${chalk.cyan(newModel)}`));
+              break;
+            }
+            console.log(chalk.red("Invalid selection. Please enter a valid number."));
+          }
+        } finally {
+          rl.close();
+        }
+      } else {
+        console.log(chalk.dim("\nTo change manually: commitdog model <provider/model>"));
+        console.log(chalk.dim("Example: commitdog model github-copilot/claude-sonnet-4.5"));
+      }
       return;
     }
 

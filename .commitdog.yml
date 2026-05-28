@@ -1,4 +1,4 @@
-model: openai/gpt-4o
+model: opencode/deepseek-v4-flash-free
 server:
   port: 4096
   auto_start: true

@@ -1,5 +1,5 @@
 import { createOpencode, createOpencodeClient } from "@opencode-ai/sdk";
-import { isServerRunning } from "./server.js";
+import { isServerRunning, ensureServer } from "./server.js";
 import { REVIEW_AGENT_PROMPT, buildReviewPrompt } from "./agent.js";
 import type { CommitDogConfig } from "../config.js";
 
@@ -24,7 +24,7 @@ export async function runReview(options: ReviewOptions): Promise<string> {
   // Try to connect to existing server, otherwise start one via SDK
   if (await isServerRunning(port)) {
     client = createOpencodeClient({
-      baseURL: `http://127.0.0.1:${port}`,
+      baseUrl: `http://127.0.0.1:${port}`,
     });
   } else {
     const oc = await createOpencode({ port });
@@ -40,103 +40,100 @@ export async function runReview(options: ReviewOptions): Promise<string> {
     const sessionId = (session.data as any).id;
 
     // Build the review prompt
-    const prompt = buildReviewPrompt(mode, config.rules);
+    const prompt = buildReviewPrompt(mode, config.rules, config.include, config.exclude);
 
     // Parse the model string (e.g. "anthropic/claude-sonnet-4-20250514")
-    const [providerID, modelID] = config.model.includes("/")
-      ? config.model.split("/", 2)
-      : ["anthropic", config.model];
+    const parts = config.model.split("/");
+    const providerID = parts[0];
+    const modelID = parts.slice(1).join("/");
 
     // Set up SSE event listener to stream output
     let fullResponse = "";
-    const responsePromise = new Promise<string>((resolve, reject) => {
-      const eventSource = new EventSource(
-        `http://127.0.0.1:${port}/global/event`
-      );
-
+    const responsePromise = new Promise<string>(async (resolve, reject) => {
       let settled = false;
 
-      eventSource.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
+      try {
+        const sseResult = await client.global.event();
+        
+        // Safety timeout: 5 minutes
+        const safetyTimeout = setTimeout(() => {
+          if (!settled) {
+            settled = true;
+            resolve(fullResponse || "Review timed out.");
+          }
+        }, 5 * 60 * 1000);
 
-          // Look for message part updates from our session
-          if (
-            data.type === "message.part.updated" &&
-            data.properties?.sessionID === sessionId
-          ) {
-            const text = data.properties?.part?.text;
-            if (text && typeof text === "string") {
-              const delta = text.slice(fullResponse.length);
-              if (delta) {
-                fullResponse = text;
-                onChunk?.(delta);
+        (async () => {
+          try {
+            for await (const event of sseResult.stream) {
+              if (settled) break;
+
+              const payload = (event as any).payload;
+              if (!payload) continue;
+
+              // Look for message part updates from our session
+              if (
+                payload.type === "message.part.updated" &&
+                payload.properties?.part?.sessionID === sessionId
+              ) {
+                const text = payload.properties?.part?.text;
+                if (text && typeof text === "string") {
+                  // Ignore user prompt parts
+                  if (text.startsWith(prompt.substring(0, 30))) {
+                    continue;
+                  }
+                  const delta = text.slice(fullResponse.length);
+                  if (delta) {
+                    fullResponse = text;
+                    onChunk?.(delta);
+                  }
+                }
+              }
+
+              // Also check for message error
+              if (
+                payload.type === "message.updated" &&
+                payload.properties?.info?.sessionID === sessionId
+              ) {
+                const msg = payload.properties?.info;
+                if (msg?.role === "assistant" && msg.error) {
+                  if (!settled) {
+                    settled = true;
+                    clearTimeout(safetyTimeout);
+                    reject(new Error(msg.error.data?.message || "Review failed"));
+                    break;
+                  }
+                }
+              }
+
+              // Check for session going completely idle
+              if (
+                payload.type === "session.idle" &&
+                payload.properties?.sessionID === sessionId &&
+                fullResponse.length > 0
+              ) {
+                if (!settled) {
+                  settled = true;
+                  clearTimeout(safetyTimeout);
+                  resolve(fullResponse);
+                  break;
+                }
               }
             }
-          }
-
-          // Session complete
-          if (
-            data.type === "session.updated" &&
-            data.properties?.session?.id === sessionId &&
-            data.properties?.session?.busy === false &&
-            fullResponse.length > 0
-          ) {
+          } catch (streamErr) {
             if (!settled) {
               settled = true;
-              eventSource.close();
-              resolve(fullResponse);
+              clearTimeout(safetyTimeout);
+              reject(streamErr);
             }
           }
-
-          // Also check for message completion
-          if (
-            data.type === "message.updated" &&
-            data.properties?.sessionID === sessionId
-          ) {
-            const msg = data.properties?.message;
-            if (
-              msg?.role === "assistant" &&
-              msg?.metadata?.status === "completed" &&
-              fullResponse.length > 0
-            ) {
-              if (!settled) {
-                settled = true;
-                eventSource.close();
-                resolve(fullResponse);
-              }
-            }
-            if (msg?.metadata?.status === "error") {
-              if (!settled) {
-                settled = true;
-                eventSource.close();
-                reject(
-                  new Error(msg?.metadata?.error || "Review failed")
-                );
-              }
-            }
-          }
-        } catch {
-          // Ignore parse errors on individual events
-        }
-      };
-
-      eventSource.onerror = () => {
-        if (!settled && !fullResponse) {
-          settled = true;
-          eventSource.close();
-          reject(new Error("Lost connection to OpenCode server"));
-        }
-      };
-
-      // Safety timeout: 5 minutes
-      setTimeout(() => {
+        })();
+      } catch (err) {
         if (!settled) {
           settled = true;
-          eventSource.close();
-          resolve(fullResponse || "Review timed out.");
+          reject(err);
         }
-      }, 5 * 60 * 1000);
+      }
     });
 
     // Send the review prompt
@@ -157,3 +154,54 @@ export async function runReview(options: ReviewOptions): Promise<string> {
     // cleanup?.();
   }
 }
+
+/**
+ * Get all available models from the OpenCode server
+ */
+export async function getAvailableModels(port: number): Promise<string[]> {
+  if (!(await isServerRunning(port))) {
+    try {
+      await ensureServer(port);
+    } catch {
+      return [];
+    }
+  }
+
+  const client = createOpencodeClient({
+    baseUrl: `http://127.0.0.1:${port}`,
+  });
+
+  try {
+    const res = await client.provider.list();
+    const payload = (res as any).data;
+
+    if (!payload || !payload.all) {
+      return [];
+    }
+
+    const connected = payload.connected || [];
+    const modelsList: string[] = [];
+
+    for (const provider of payload.all) {
+      // Only include connected providers
+      if (!connected.includes(provider.id)) {
+        continue;
+      }
+
+      if (provider.models) {
+        for (const modelKey of Object.keys(provider.models)) {
+          const model = provider.models[modelKey];
+          // Only show active models
+          if (model.status === "active" || !model.status) {
+            modelsList.push(`${provider.id}/${model.id}`);
+          }
+        }
+      }
+    }
+
+    return modelsList.sort();
+  } catch (err) {
+    return [];
+  }
+}
+
