@@ -62,20 +62,20 @@ export function buildReviewPrompt(
   customRules: string[],
   include?: string[],
   exclude?: string[],
+  localContext?: string,
 ): string {
   const modeInstruction =
-    mode === "staged"
-      ? "Review the currently staged changes (run `git diff --staged` to see them)."
-      : "Review the last commit (run `git show --format= --stat --patch HEAD` to see the changes, and `git log -1` for the commit message).";
+    mode === "staged" ? "Review the currently staged changes." : "Review the last commit.";
 
   let prompt = `${modeInstruction}
 
-Use your tools to:
-1. Get the diff
-2. Read the full files that changed for context
-3. Check related files if needed to understand impact
+CommitDog has already collected the diff and likely-relevant local context below. Use this context first. Only call tools for narrow follow-up questions when the provided context is insufficient.
 
 Then provide your review following the format in your instructions.`;
+
+  if (localContext) {
+    prompt += `\n\n${localContext}`;
+  }
 
   if (include && include.length > 0 && !(include.length === 1 && include[0] === "**/*")) {
     prompt += `\n\nOnly review files that match these patterns: ${include.join(", ")}`;

@@ -25,6 +25,7 @@ export interface ReviewReport {
 export interface ReviewOptions {
   mode: "last-commit" | "staged";
   config: CommitDogConfig;
+  localContext?: string;
   onProgress?: (event: ReviewProgressEvent) => void;
 }
 
@@ -47,7 +48,7 @@ export interface ReviewTiming {
  * Creates a session, sends the review prompt, and returns a structured report.
  */
 export async function runReview(options: ReviewOptions): Promise<ReviewReport> {
-  const { mode, config, onProgress } = options;
+  const { mode, config, localContext, onProgress } = options;
   const port = config.server.port;
   const timings: ReviewTiming[] = [];
 
@@ -78,7 +79,13 @@ export async function runReview(options: ReviewOptions): Promise<ReviewReport> {
 
   // Build the review prompt
   const promptStart = performance.now();
-  const prompt = buildReviewPrompt(mode, config.rules, config.include, config.exclude);
+  const prompt = buildReviewPrompt(
+    mode,
+    config.rules,
+    config.include,
+    config.exclude,
+    localContext,
+  );
   recordTiming(timings, onProgress, "prompt-build", "Review prompt build", promptStart);
 
   // Parse the model string (e.g. "anthropic/claude-sonnet-4-20250514")

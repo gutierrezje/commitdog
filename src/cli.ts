@@ -14,7 +14,8 @@ import {
 } from "./opencode/client.js";
 import { ensureServer, isServerRunning, stopServer } from "./opencode/server.js";
 import { installHook, uninstallHook, isHookInstalled } from "./git/hooks.js";
-import { isGitRepo, hasCommits, getStagedDiff } from "./git/diff.js";
+import { isGitRepo, hasCommits } from "./git/diff.js";
+import { buildReviewContext, renderReviewContext } from "./review/context.js";
 import {
   printHeader,
   printFooter,
@@ -68,25 +69,30 @@ program
       }
     }
 
-    if (mode === "staged") {
-      const stagedDiffStart = performance.now();
-      const diff = await getStagedDiff();
-      recordCliTiming(timings, "staged-diff-check", "Staged diff check", stagedDiffStart);
-      if (diff.files.length === 0) {
-        console.log(chalk.yellow("No staged changes to review"));
-        process.exit(0);
-      }
-    }
-
     printHeader();
 
     const spinner = ora({
-      text: "Connecting to OpenCode...",
+      text: "Building local review context...",
       color: "cyan",
     }).start();
 
     try {
+      const contextStart = performance.now();
+      const reviewContext = await buildReviewContext(mode, config);
+      recordCliTiming(timings, "context-build", "Local review context build", contextStart);
+
+      if (mode === "staged" && reviewContext.diff.files.length === 0) {
+        spinner.stop();
+        console.log(chalk.yellow("No staged changes to review"));
+        process.exit(0);
+      }
+
+      const contextRenderStart = performance.now();
+      const localContext = renderReviewContext(reviewContext);
+      recordCliTiming(timings, "context-render", "Local review context render", contextRenderStart);
+
       // Ensure server and start review
+      spinner.text = "Connecting to OpenCode...";
       const serverStart = performance.now();
       await ensureServer(config.server.port);
       recordCliTiming(timings, "server-ensure", "OpenCode server ensure", serverStart);
@@ -96,6 +102,7 @@ program
       const report: ReviewReport = await runReview({
         mode,
         config,
+        localContext,
         onProgress: (event) => {
           spinner.text = formatReviewProgress(event);
         },
