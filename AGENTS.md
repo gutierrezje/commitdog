@@ -33,6 +33,7 @@ Local AI code review CLI. Orchestrates headless OpenCode server, delegates repo 
 - Spinner pattern: start → update text → stop/succeed/fail. Never leave spinning.
 - CLI errors: `chalk.red` + `process.exit(1)`. Hook mode exits 0 even on failure.
 - Report timestamps use `ISOString().replace(/[:.]/g, "-")`.
+- Static verification: Always run `pnpm run lint` (which executes both oxlint and `tsc --noEmit`) before committing. Unit tests are heavily mocked and will miss simple ReferenceErrors.
 
 ## Anti-Patterns / Gotchas
 
@@ -55,6 +56,7 @@ Local AI code review CLI. Orchestrates headless OpenCode server, delegates repo 
   - Stage your work: `git add -p` (or `git add .`)
   - Run: `commitdog review --staged`
   - Read: `.commitdog/reviews/latest.md`
+  - Verify static type safety: `pnpm run lint` (runs oxlint and `tsc --noEmit`)
   - Iterate until clean, then commit: `git commit -m "..."` (or your preferred flow)
 
 - **Review last commit**:
