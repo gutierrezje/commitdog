@@ -354,7 +354,7 @@ export function parseStructuredReview(raw: string): ReviewReport {
   if (firstBrace === -1 || lastBrace === -1 || lastBrace <= firstBrace) {
     throw new Error(
       markerIndex === -1
-        ? `Review did not include FINAL_REVIEW_JSON marker. Raw response preview: ${previewRawResponse(raw)}`
+        ? `Review did not contain a valid JSON object. Raw response preview: ${previewRawResponse(raw)}`
         : `Review did not include a valid JSON object after FINAL_REVIEW_JSON. Raw response preview: ${previewRawResponse(raw)}`,
     );
   }
@@ -438,9 +438,12 @@ function previewRawResponse(raw: string): string {
 }
 
 function looksLikeCompleteStructuredReview(text: string): boolean {
+  // Streaming completion detector must stay strict: require the marker.
+  // Only the final parser (parseStructuredReview) tolerates marker-less JSON.
   const markerIndex = text.indexOf("FINAL_REVIEW_JSON");
-  const afterMarker =
-    markerIndex === -1 ? text : text.slice(markerIndex + "FINAL_REVIEW_JSON".length);
+  if (markerIndex === -1) return false;
+
+  const afterMarker = text.slice(markerIndex + "FINAL_REVIEW_JSON".length);
   const firstBrace = afterMarker.indexOf("{");
   const lastBrace = afterMarker.lastIndexOf("}");
   if (firstBrace === -1 || lastBrace === -1 || lastBrace <= firstBrace) return false;
