@@ -320,21 +320,21 @@ export async function getAvailableModels(port: number): Promise<string[]> {
   }
 }
 
-function parseStructuredReview(raw: string): ReviewReport {
+export function parseStructuredReview(raw: string): ReviewReport {
   // Expect a line starting with FINAL_REVIEW_JSON followed by a single JSON object.
   const marker = "FINAL_REVIEW_JSON";
   const markerIndex = raw.indexOf(marker);
 
-  if (markerIndex === -1) {
-    throw new Error("Review did not include FINAL_REVIEW_JSON marker.");
-  }
-
-  const afterMarker = raw.slice(markerIndex + marker.length);
+  const afterMarker = markerIndex === -1 ? raw : raw.slice(markerIndex + marker.length);
   const firstBrace = afterMarker.indexOf("{");
   const lastBrace = afterMarker.lastIndexOf("}");
 
   if (firstBrace === -1 || lastBrace === -1 || lastBrace <= firstBrace) {
-    throw new Error("Review did not include a valid JSON object after FINAL_REVIEW_JSON.");
+    throw new Error(
+      markerIndex === -1
+        ? `Review did not include FINAL_REVIEW_JSON marker. Raw response preview: ${previewRawResponse(raw)}`
+        : `Review did not include a valid JSON object after FINAL_REVIEW_JSON. Raw response preview: ${previewRawResponse(raw)}`,
+    );
   }
 
   const jsonText = afterMarker.slice(firstBrace, lastBrace + 1);
@@ -343,7 +343,9 @@ function parseStructuredReview(raw: string): ReviewReport {
   try {
     parsed = JSON.parse(jsonText);
   } catch (err) {
-    throw new Error(`Failed to parse review JSON: ${(err as Error).message}`);
+    throw new Error(
+      `Failed to parse review JSON: ${(err as Error).message}. Raw response preview: ${previewRawResponse(raw)}`,
+    );
   }
 
   if (
@@ -352,7 +354,9 @@ function parseStructuredReview(raw: string): ReviewReport {
     typeof (parsed as any).summary !== "string" ||
     !Array.isArray((parsed as any).findings)
   ) {
-    throw new Error("Review JSON is missing required fields: summary or findings.");
+    throw new Error(
+      `Review JSON is missing required fields: summary or findings. Raw response preview: ${previewRawResponse(raw)}`,
+    );
   }
 
   const summary = (parsed as any).summary as string;
@@ -406,12 +410,15 @@ function parseStructuredReview(raw: string): ReviewReport {
   };
 }
 
-function looksLikeCompleteStructuredReview(text: string): boolean {
-  const marker = "FINAL_REVIEW_JSON";
-  const markerIndex = text.indexOf(marker);
-  if (markerIndex === -1) return false;
+function previewRawResponse(raw: string): string {
+  const compact = raw.replace(/\s+/g, " ").trim();
+  return compact.length > 500 ? `${compact.slice(0, 500)}...` : compact || "<empty>";
+}
 
-  const afterMarker = text.slice(markerIndex + marker.length);
+function looksLikeCompleteStructuredReview(text: string): boolean {
+  const markerIndex = text.indexOf("FINAL_REVIEW_JSON");
+  const afterMarker =
+    markerIndex === -1 ? text : text.slice(markerIndex + "FINAL_REVIEW_JSON".length);
   const firstBrace = afterMarker.indexOf("{");
   const lastBrace = afterMarker.lastIndexOf("}");
   if (firstBrace === -1 || lastBrace === -1 || lastBrace <= firstBrace) return false;
