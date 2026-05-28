@@ -126,6 +126,8 @@ COMMITDOG_LOG_DIR=".commitdog"
 COMMITDOG_LOG_FILE="$COMMITDOG_LOG_DIR/hook.log"
 mkdir -p "$COMMITDOG_LOG_DIR"
 
+echo "commitdog: review started in background; log: $COMMITDOG_LOG_FILE; latest report: .commitdog/reviews/latest.md"
+
 if [ -x ${quotedCommitDog} ]; then
   nohup ${quotedCommitDog} review --hook >>"$COMMITDOG_LOG_FILE" 2>&1 </dev/null &
 elif command -v commitdog >/dev/null 2>&1; then

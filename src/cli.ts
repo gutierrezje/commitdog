@@ -5,7 +5,13 @@ import chalk from "chalk";
 import ora from "ora";
 import { createInterface } from "node:readline/promises";
 import { loadConfig, saveConfig, configExists, type CommitDogConfig } from "./config.js";
-import { runReview, getAvailableModels, type ReviewReport } from "./opencode/client.js";
+import {
+  runReview,
+  getAvailableModels,
+  type ReviewProgressEvent,
+  type ReviewReport,
+  type ReviewTiming,
+} from "./opencode/client.js";
 import { ensureServer, isServerRunning, stopServer } from "./opencode/server.js";
 import { installHook, uninstallHook, isHookInstalled } from "./git/hooks.js";
 import { isGitRepo, hasCommits, getStagedDiff } from "./git/diff.js";
@@ -31,8 +37,14 @@ program
   .option("--staged", "Review staged changes instead of last commit")
   .option("--hook", "Running from git hook (non-blocking mode)")
   .action(async (options) => {
+    const totalStart = performance.now();
+    const timings: ReviewTiming[] = [];
+
     // Preflight checks
-    if (!(await isGitRepo())) {
+    const gitRepoStart = performance.now();
+    const isRepo = await isGitRepo();
+    recordCliTiming(timings, "git-repo-check", "Git repository check", gitRepoStart);
+    if (!isRepo) {
       console.error(chalk.red("Not a git repository"));
       process.exit(1);
     }
@@ -46,13 +58,20 @@ program
     const config = await loadConfigOrExit();
     const mode = options.staged ? "staged" : "last-commit";
 
-    if (mode === "last-commit" && !(await hasCommits())) {
-      console.error(chalk.red("No commits found in this repository"));
-      process.exit(1);
+    if (mode === "last-commit") {
+      const hasCommitsStart = performance.now();
+      const commitsExist = await hasCommits();
+      recordCliTiming(timings, "git-commit-check", "Git commit check", hasCommitsStart);
+      if (!commitsExist) {
+        console.error(chalk.red("No commits found in this repository"));
+        process.exit(1);
+      }
     }
 
     if (mode === "staged") {
+      const stagedDiffStart = performance.now();
       const diff = await getStagedDiff();
+      recordCliTiming(timings, "staged-diff-check", "Staged diff check", stagedDiffStart);
       if (diff.files.length === 0) {
         console.log(chalk.yellow("No staged changes to review"));
         process.exit(0);
@@ -68,25 +87,38 @@ program
 
     try {
       // Ensure server and start review
+      const serverStart = performance.now();
       await ensureServer(config.server.port);
+      recordCliTiming(timings, "server-ensure", "OpenCode server ensure", serverStart);
       spinner.text = "Reviewing changes...";
-      spinner.stop();
-      console.log(); // Space after spinner
 
+      const reviewStart = performance.now();
       const report: ReviewReport = await runReview({
         mode,
         config,
+        onProgress: (event) => {
+          spinner.text = formatReviewProgress(event);
+        },
       });
+      recordCliTiming(timings, "review-run", "OpenCode review run", reviewStart);
+      spinner.succeed("Review complete.");
+      console.log(); // Space after spinner
 
+      const renderStart = performance.now();
       const markdown = renderMarkdown(report);
+      recordCliTiming(timings, "render-report", "Markdown render", renderStart);
 
       // Write markdown report
+      const writeStart = performance.now();
       const reportPath = await writeMarkdownReport(markdown);
+      recordCliTiming(timings, "write-report", "Report write", writeStart);
+      recordCliTiming(timings, "total", "Total review command", totalStart);
 
       // Print the rendered, colorized markdown to stdout
       console.log(colorizeMarkdown(markdown));
 
       printFooter(report, reportPath);
+      printTimingSummary([...timings, ...(report.timings ?? [])]);
       if (options.hook) {
         process.exit(0);
       }
@@ -101,6 +133,45 @@ program
       process.exit(1);
     }
   });
+
+function formatReviewProgress(event: ReviewProgressEvent): string {
+  switch (event.type) {
+    case "server":
+    case "session":
+    case "idle":
+      return event.message;
+    case "tool":
+      return `OpenCode tool: ${event.message}`;
+    case "output":
+      return event.message;
+    case "timing":
+      return event.message;
+  }
+}
+
+function recordCliTiming(
+  timings: ReviewTiming[],
+  phase: string,
+  label: string,
+  start: number,
+): void {
+  timings.push({ phase, label, ms: performance.now() - start });
+}
+
+function printTimingSummary(timings: ReviewTiming[]): void {
+  if (timings.length === 0) return;
+
+  console.log(chalk.dim("Timing:"));
+  for (const timing of timings) {
+    console.log(chalk.dim(`  ${timing.label}: ${formatDuration(timing.ms)}`));
+  }
+  console.log();
+}
+
+function formatDuration(ms: number): string {
+  if (ms < 1000) return `${Math.round(ms)}ms`;
+  return `${(ms / 1000).toFixed(1)}s`;
+}
 
 // Init command
 program
@@ -262,6 +333,9 @@ hookCmd
     const action = alreadyInstalled ? "updated" : "installed";
     console.log(chalk.green(`✓ Post-commit hook ${action}: ${hookPath}`));
     console.log(chalk.dim("Reviews will run automatically after each commit (non-blocking)"));
+    console.log(
+      chalk.dim("Hook output: .commitdog/hook.log; latest report: .commitdog/reviews/latest.md"),
+    );
   });
 
 hookCmd

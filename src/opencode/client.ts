@@ -19,11 +19,27 @@ export interface ReviewFinding {
 export interface ReviewReport {
   summary: string;
   findings: ReviewFinding[];
+  timings?: ReviewTiming[];
 }
 
 export interface ReviewOptions {
   mode: "last-commit" | "staged";
   config: CommitDogConfig;
+  onProgress?: (event: ReviewProgressEvent) => void;
+}
+
+export type ReviewProgressEvent =
+  | { type: "server"; message: string }
+  | { type: "session"; message: string; sessionId?: string }
+  | { type: "tool"; message: string; tool: string; status: string }
+  | { type: "output"; message: string; characters: number }
+  | { type: "timing"; message: string; phase: string; ms: number }
+  | { type: "idle"; message: string };
+
+export interface ReviewTiming {
+  phase: string;
+  label: string;
+  ms: number;
 }
 
 /**
@@ -31,29 +47,39 @@ export interface ReviewOptions {
  * Creates a session, sends the review prompt, and returns a structured report.
  */
 export async function runReview(options: ReviewOptions): Promise<ReviewReport> {
-  const { mode, config } = options;
+  const { mode, config, onProgress } = options;
   const port = config.server.port;
+  const timings: ReviewTiming[] = [];
 
   let client;
 
   // Try to connect to existing server, otherwise start one via SDK
+  const connectStart = performance.now();
   if (await isServerRunning(port)) {
+    onProgress?.({ type: "server", message: `Connected to OpenCode on port ${port}.` });
     client = createOpencodeClient({
       baseUrl: `http://127.0.0.1:${port}`,
     });
   } else {
+    onProgress?.({ type: "server", message: `Starting OpenCode on port ${port}.` });
     const oc = await createOpencode({ port });
     client = oc.client;
   }
+  recordTiming(timings, onProgress, "opencode-connect", "OpenCode client connection", connectStart);
 
   // Create a new session for this review
+  const sessionStart = performance.now();
   const session = await client.session.create({
     body: {},
   });
   const sessionId = (session.data as any).id;
+  recordTiming(timings, onProgress, "session-create", "OpenCode session creation", sessionStart);
+  onProgress?.({ type: "session", message: "Created review session.", sessionId });
 
   // Build the review prompt
+  const promptStart = performance.now();
   const prompt = buildReviewPrompt(mode, config.rules, config.include, config.exclude);
+  recordTiming(timings, onProgress, "prompt-build", "Review prompt build", promptStart);
 
   // Parse the model string (e.g. "anthropic/claude-sonnet-4-20250514")
   const parts = config.model.split("/");
@@ -62,17 +88,33 @@ export async function runReview(options: ReviewOptions): Promise<ReviewReport> {
 
   // Set up SSE event listener to capture the final structured response
   let fullResponse = "";
-  const sseResult = await client.global.event();
+  const eventsController = new AbortController();
+  const eventStart = performance.now();
+  const sseResult = await client.global.event({
+    signal: eventsController.signal,
+  });
+  recordTiming(timings, onProgress, "event-stream", "OpenCode event stream connection", eventStart);
   const responsePromise = new Promise<string>((resolve, reject) => {
     let settled = false;
+    let safetyTimeout: ReturnType<typeof setTimeout>;
+
+    const settle = (outcome: "resolve" | "reject", value: string | Error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(safetyTimeout);
+      eventsController.abort();
+
+      if (outcome === "resolve") {
+        resolve(value as string);
+      } else {
+        reject(value);
+      }
+    };
 
     // Safety timeout: 5 minutes
-    const safetyTimeout = setTimeout(
+    safetyTimeout = setTimeout(
       () => {
-        if (!settled) {
-          settled = true;
-          reject(new Error("Review timed out."));
-        }
+        settle("reject", new Error("Review timed out."));
       },
       5 * 60 * 1000,
     );
@@ -90,20 +132,38 @@ export async function runReview(options: ReviewOptions): Promise<ReviewReport> {
             payload.type === "message.part.updated" &&
             payload.properties?.part?.sessionID === sessionId
           ) {
-            const text = payload.properties?.part?.text;
-            if (text && typeof text === "string") {
+            const part = payload.properties.part;
+
+            if (part.type === "tool") {
+              const state = part.state?.status ?? "unknown";
+              const title =
+                part.state && "title" in part.state && typeof part.state.title === "string"
+                  ? part.state.title
+                  : part.tool;
+              onProgress?.({
+                type: "tool",
+                message: `${title} (${state})`,
+                tool: part.tool,
+                status: state,
+              });
+            }
+
+            if (part.type === "text" && part.text && typeof part.text === "string") {
               // We intentionally do NOT stream partial chunks to stdout.
               // Instead we accumulate the full response and then parse the JSON payload.
-              if (text.length > fullResponse.length) {
-                fullResponse = text;
+              if (part.text.length > fullResponse.length) {
+                fullResponse = part.text;
+                onProgress?.({
+                  type: "output",
+                  message: `Review response received (${fullResponse.length} chars).`,
+                  characters: fullResponse.length,
+                });
               }
 
               // Some OpenCode sessions never emit `session.idle` (or it can be missed).
               // If we already have a complete JSON payload, finish immediately.
-              if (!settled && looksLikeCompleteStructuredReview(fullResponse)) {
-                settled = true;
-                clearTimeout(safetyTimeout);
-                resolve(fullResponse);
+              if (looksLikeCompleteStructuredReview(fullResponse)) {
+                settle("resolve", fullResponse);
                 break;
               }
             }
@@ -116,13 +176,18 @@ export async function runReview(options: ReviewOptions): Promise<ReviewReport> {
           ) {
             const msg = payload.properties?.info;
             if (msg?.role === "assistant" && msg.error) {
-              if (!settled) {
-                settled = true;
-                clearTimeout(safetyTimeout);
-                reject(new Error(msg.error.data?.message || "Review failed"));
-                break;
-              }
+              settle("reject", new Error(msg.error.data?.message || "Review failed"));
+              break;
             }
+          }
+
+          if (payload.type === "session.status" && payload.properties?.sessionID === sessionId) {
+            const status = payload.properties.status;
+            const message =
+              status.type === "retry"
+                ? `OpenCode retrying: ${status.message}`
+                : `OpenCode session ${status.type}.`;
+            onProgress?.({ type: "session", message, sessionId });
           }
 
           // Check for session going completely idle
@@ -131,37 +196,35 @@ export async function runReview(options: ReviewOptions): Promise<ReviewReport> {
             payload.properties?.sessionID === sessionId &&
             fullResponse.length > 0
           ) {
-            if (!settled) {
-              settled = true;
-              clearTimeout(safetyTimeout);
-              resolve(fullResponse);
-              break;
-            }
+            onProgress?.({ type: "idle", message: "OpenCode session is idle." });
+            settle("resolve", fullResponse);
+            break;
           }
         }
 
         // If the stream ends without throwing and without emitting `session.idle`,
         // we must still settle. Otherwise the caller can hang indefinitely.
         if (!settled) {
-          settled = true;
-          clearTimeout(safetyTimeout);
           if (fullResponse.length > 0) {
-            resolve(fullResponse);
+            settle("resolve", fullResponse);
           } else {
-            reject(new Error("OpenCode event stream ended before any review text was received."));
+            settle(
+              "reject",
+              new Error("OpenCode event stream ended before any review text was received."),
+            );
           }
         }
       } catch (streamErr) {
-        if (!settled) {
-          settled = true;
-          clearTimeout(safetyTimeout);
-          reject(streamErr);
+        if (!settled && !eventsController.signal.aborted) {
+          settle("reject", streamErr instanceof Error ? streamErr : new Error(String(streamErr)));
         }
       }
     })();
   });
 
   // Send the review prompt
+  onProgress?.({ type: "session", message: "Sending review prompt.", sessionId });
+  const promptSendStart = performance.now();
   await client.session.prompt({
     path: { id: sessionId },
     body: {
@@ -170,9 +233,34 @@ export async function runReview(options: ReviewOptions): Promise<ReviewReport> {
       parts: [{ type: "text", text: prompt }],
     },
   });
+  recordTiming(timings, onProgress, "prompt-send", "Review prompt send", promptSendStart);
 
+  const agentWaitStart = performance.now();
   const raw = await responsePromise;
-  return parseStructuredReview(raw);
+  recordTiming(timings, onProgress, "agent-wait", "OpenCode review generation", agentWaitStart);
+
+  const parseStart = performance.now();
+  const report = parseStructuredReview(raw);
+  recordTiming(timings, onProgress, "parse-review", "Review JSON parsing", parseStart);
+
+  return { ...report, timings };
+}
+
+function recordTiming(
+  timings: ReviewTiming[],
+  onProgress: ReviewOptions["onProgress"],
+  phase: string,
+  label: string,
+  start: number,
+): void {
+  const ms = performance.now() - start;
+  timings.push({ phase, label, ms });
+  onProgress?.({ type: "timing", message: `${label}: ${formatDuration(ms)}`, phase, ms });
+}
+
+function formatDuration(ms: number): string {
+  if (ms < 1000) return `${Math.round(ms)}ms`;
+  return `${(ms / 1000).toFixed(1)}s`;
 }
 
 /**
@@ -248,9 +336,7 @@ function parseStructuredReview(raw: string): ReviewReport {
   try {
     parsed = JSON.parse(jsonText);
   } catch (err) {
-    throw new Error(
-      `Failed to parse review JSON: ${(err as Error).message}`,
-    );
+    throw new Error(`Failed to parse review JSON: ${(err as Error).message}`);
   }
 
   if (

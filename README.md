@@ -61,6 +61,7 @@ commitdog review --staged
 ```
 
 Notes:
+
 - `npm link` installs the `commitdog` shim globally, and it runs `dist/cli.js` from this checkout.
 - When you change `src/**`, re-run `npm run build` so `dist/` stays in sync (this also keeps the post-commit hook using the newest code).
 
