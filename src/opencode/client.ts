@@ -92,7 +92,7 @@ export async function runReview(options: ReviewOptions): Promise<ReviewReport> {
 
   // Parse the model string (e.g. "anthropic/claude-sonnet-4-20250514")
   const parts = config.model.split("/");
-  const providerID = parts[0];
+  const providerID = parts[0]!;
   const modelID = parts.slice(1).join("/");
 
   // Set up SSE event listener to capture the final structured response

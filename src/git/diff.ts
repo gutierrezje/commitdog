@@ -85,7 +85,7 @@ function parseDiff(raw: string): DiffResult {
     const fileMatch = line.match(/^diff --git a\/(.+) b\/(.+)$/);
     if (fileMatch) {
       files.push({
-        path: fileMatch[2],
+        path: fileMatch[2]!,
         status: "modified",
         additions: 0,
         deletions: 0,
@@ -94,29 +94,29 @@ function parseDiff(raw: string): DiffResult {
     }
 
     if (line.startsWith("rename to ") && files.length > 0) {
-      files[files.length - 1].path = line.slice("rename to ".length);
-      files[files.length - 1].status = "renamed";
+      files[files.length - 1]!.path = line.slice("rename to ".length);
+      files[files.length - 1]!.status = "renamed";
       continue;
     }
 
     // Detect new files
     if (line === "--- /dev/null" && files.length > 0) {
-      files[files.length - 1].status = "added";
+      files[files.length - 1]!.status = "added";
       continue;
     }
 
     // Detect deleted files
     if (line === "+++ /dev/null" && files.length > 0) {
-      files[files.length - 1].status = "deleted";
+      files[files.length - 1]!.status = "deleted";
       continue;
     }
 
     // Count additions/deletions
     if (files.length > 0) {
       if (line.startsWith("+") && !line.startsWith("+++")) {
-        files[files.length - 1].additions++;
+        files[files.length - 1]!.additions++;
       } else if (line.startsWith("-") && !line.startsWith("---")) {
-        files[files.length - 1].deletions++;
+        files[files.length - 1]!.deletions++;
       }
     }
   }

@@ -225,12 +225,12 @@ async function runInit() {
         );
         const trimmed = answer.trim();
         if (trimmed === "") {
-          selectedModel = models[0];
+          selectedModel = models[0]!;
           break;
         }
         const num = parseInt(trimmed, 10);
         if (num >= 1 && num <= models.length) {
-          selectedModel = models[num - 1];
+          selectedModel = models[num - 1]!;
           break;
         }
         console.log(chalk.red("Invalid selection. Please enter a valid number."));
@@ -301,7 +301,7 @@ program
             }
             const num = parseInt(trimmed, 10);
             if (num >= 1 && num <= models.length) {
-              const newModel = models[num - 1];
+              const newModel = models[num - 1]!;
               config.model = newModel;
               await saveConfig(config);
               console.log(chalk.green(`✓ Model set to ${chalk.cyan(newModel)}`));

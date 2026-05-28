@@ -36,7 +36,7 @@ export interface ChangedFileContext {
   astSymbols: AstSymbolContext[];
   content?: string;
   truncated: boolean;
-  skippedReason?: string;
+  skippedReason?: string | undefined;
 }
 
 export interface AstSymbolContext {
@@ -387,9 +387,9 @@ function parseReferenceLine(line: string): ReferenceMatch | undefined {
   if (!match) return undefined;
 
   return {
-    path: match[1],
+    path: match[1]!,
     line: Number(match[2]),
-    text: match[3].trim().slice(0, MAX_REFERENCE_LINE_CHARS),
+    text: match[3]!.trim().slice(0, MAX_REFERENCE_LINE_CHARS),
   };
 }
 
@@ -415,7 +415,7 @@ function filterDiffRaw(rawDiff: string, includedPaths: Set<string>): string {
   for (const line of rawDiff.split("\n")) {
     const fileMatch = line.match(/^diff --git a\/(.+) b\/(.+)$/);
     if (fileMatch) {
-      includeCurrentFile = includedPaths.has(fileMatch[2]);
+      includeCurrentFile = includedPaths.has(fileMatch[2]!);
     }
 
     if (includeCurrentFile) {
@@ -469,7 +469,7 @@ function extractSymbols(content: string): string[] {
 
   for (const pattern of patterns) {
     for (const match of content.matchAll(pattern)) {
-      symbols.add(match[1]);
+      symbols.add(match[1]!);
     }
   }
 

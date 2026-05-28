@@ -75,9 +75,9 @@ describe("buildReviewContext", () => {
     const rendered = renderReviewContext(context);
 
     expect(context.diff.files).toHaveLength(1);
-    expect(context.changedFiles[0].symbols).toContain("calculateTotal");
-    expect(context.changedFiles[0].changedLines).toContain(2);
-    expect(context.changedFiles[0].astSymbols[0]).toMatchObject({
+    expect(context.changedFiles[0]!.symbols).toContain("calculateTotal");
+    expect(context.changedFiles[0]!.changedLines).toContain(2);
+    expect(context.changedFiles[0]!.astSymbols[0]!).toMatchObject({
       name: "calculateTotal",
       kind: "function",
       startLine: 1,
