@@ -6,6 +6,7 @@ import { execa } from "execa";
 const HOOK_MARKER = "# commitdog-managed";
 const HOOK_END_MARKER = "# end-commitdog";
 const HOOK_SHEBANG = "#!/bin/sh";
+const LAST_HOOK_STATUS = ".commitdog/last-hook-status.json";
 
 /**
  * Get the .git/hooks directory path
@@ -78,6 +79,50 @@ export interface HookStatus {
   installed: boolean;
   stale: boolean;
   reason?: string;
+}
+
+export interface HookFailure {
+  exitCode: number;
+  timestamp: string;
+}
+
+/**
+ * Check if the background post-commit hook failed recently.
+ * Returns failure details only for non-zero exits within the last hour.
+ */
+export async function checkRecentHookFailure(): Promise<HookFailure | undefined> {
+  const statusPath = join(process.cwd(), LAST_HOOK_STATUS);
+  if (!existsSync(statusPath)) {
+    return undefined;
+  }
+
+  try {
+    const raw = await readFile(statusPath, "utf-8");
+    const parsed = JSON.parse(raw) as unknown;
+    if (
+      !parsed ||
+      typeof parsed !== "object" ||
+      typeof (parsed as any).exitCode !== "number" ||
+      typeof (parsed as any).timestamp !== "string"
+    ) {
+      return undefined;
+    }
+
+    const { exitCode, timestamp } = parsed as HookFailure;
+    if (exitCode === 0) {
+      return undefined;
+    }
+
+    const failureTime = new Date(timestamp).getTime();
+    const oneHourAgo = Date.now() - 60 * 60 * 1000;
+    if (Number.isNaN(failureTime) || failureTime < oneHourAgo) {
+      return undefined;
+    }
+
+    return { exitCode, timestamp };
+  } catch {
+    return undefined;
+  }
 }
 
 /**

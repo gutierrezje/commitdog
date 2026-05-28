@@ -13,7 +13,13 @@ import {
   type ReviewTiming,
 } from "./opencode/client.js";
 import { ensureServer, isServerRunning, stopServer } from "./opencode/server.js";
-import { installHook, uninstallHook, isHookInstalled, checkHookStale } from "./git/hooks.js";
+import {
+  installHook,
+  uninstallHook,
+  isHookInstalled,
+  checkHookStale,
+  checkRecentHookFailure,
+} from "./git/hooks.js";
 import { isGitRepo, hasCommits } from "./git/diff.js";
 import { buildReviewContext, renderReviewContext } from "./review/context.js";
 import {
@@ -23,6 +29,22 @@ import {
   renderMarkdown,
   colorizeMarkdown,
 } from "./review/formatter.js";
+
+import { writeFile } from "node:fs/promises";
+import { join } from "node:path";
+
+async function writeHookStatus(exitCode: number): Promise<void> {
+  try {
+    const statusPath = join(process.cwd(), ".commitdog", "last-hook-status.json");
+    await writeFile(
+      statusPath,
+      JSON.stringify({ exitCode, timestamp: new Date().toISOString() }, null, 2),
+      "utf-8",
+    );
+  } catch {
+    // Best-effort: status file is advisory only
+  }
+}
 
 const program = new Command();
 
@@ -71,6 +93,16 @@ program
     }
 
     printHeader();
+
+    const hookFailure = await checkRecentHookFailure();
+    if (hookFailure) {
+      console.log(
+        chalk.yellow(
+          `⚠ Post-commit hook failed at ${new Date(hookFailure.timestamp).toLocaleString()}. Check .commitdog/hook.log`,
+        ),
+      );
+      console.log();
+    }
 
     const spinner = ora({
       text: "Building local review context...",
@@ -129,6 +161,7 @@ program
       printFooter(report, reportPath);
       printTimingSummary([...timings, ...(report.timings ?? [])]);
       if (options.hook) {
+        await writeHookStatus(0);
         process.exit(0);
       }
     } catch (err) {
@@ -138,6 +171,9 @@ program
       if (message.includes("opencode not found")) {
         console.log(chalk.dim("Install: npm i -g opencode-ai"));
         console.log(chalk.dim("Docs: https://opencode.ai/docs/"));
+      }
+      if (options.hook) {
+        await writeHookStatus(1);
       }
       process.exit(1);
     }
