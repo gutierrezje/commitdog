@@ -46,9 +46,9 @@ Local AI code review CLI. Orchestrates headless OpenCode server, delegates repo 
 ## Dogfooding (run locally, then commit)
 
 - **One-time setup**:
-  - `npm install`
-  - `npm run build`
-  - `npm link` (installs the `commitdog` binary on your PATH)
+  - `pnpm install`
+  - `pnpm run build`
+  - `pnpm link --global` (installs the `commitdog` binary on your PATH)
   - `commitdog init` (creates `.commitdog.yml` and selects a model)
 
 - **Review staged changes (recommended loop)**:
@@ -65,5 +65,5 @@ Local AI code review CLI. Orchestrates headless OpenCode server, delegates repo 
   - Make a commit as usual; the hook should run `commitdog review --hook` and write `.commitdog/reviews/latest.md`
 
 - **Keeping the hook on the latest code while developing CommitDog**:
-  - After changing `src/**`, re-run `npm run build` so `dist/cli.js` is up to date.
-  - If you’re using `npm link`, the `commitdog` shim will pick up the updated `dist/cli.js` after rebuilding.
+  - After changing `src/**`, re-run `pnpm run build` so `dist/cli.js` is up to date.
+  - If you’re using `pnpm link --global`, the `commitdog` shim will pick up the updated `dist/cli.js` after rebuilding.

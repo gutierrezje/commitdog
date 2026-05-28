@@ -76,7 +76,15 @@ describe("buildReviewContext", () => {
 
     expect(context.diff.files).toHaveLength(1);
     expect(context.changedFiles[0].symbols).toContain("calculateTotal");
+    expect(context.changedFiles[0].changedLines).toContain(2);
+    expect(context.changedFiles[0].astSymbols[0]).toMatchObject({
+      name: "calculateTotal",
+      kind: "function",
+      startLine: 1,
+      endLine: 3,
+    });
     expect(rendered).toContain("src/example.ts");
+    expect(rendered).toContain("Changed TypeScript AST symbols");
     expect(rendered).toContain("src/example.test.ts");
     expect(rendered).toContain("src/consumer.ts");
     expect(rendered).toContain("return value + 2");

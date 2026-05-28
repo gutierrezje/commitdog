@@ -37,14 +37,14 @@ Clone the repository and install dependencies locally, or build the CLI:
 # Clone and build
 git clone https://github.com/jesus/commitdog.git
 cd commitdog
-npm install
-npm run build
+pnpm install
+pnpm run build
 ```
 
 Link the package globally:
 
 ```bash
-npm link
+pnpm link --global
 ```
 
 ### Developing / dogfooding CommitDog (on this repo)
@@ -53,7 +53,7 @@ If you’re working on CommitDog itself, the simplest loop is:
 
 ```bash
 # after editing src/**
-npm run build
+pnpm run build
 
 # review your staged changes
 git add -p
@@ -62,8 +62,8 @@ commitdog review --staged
 
 Notes:
 
-- `npm link` installs the `commitdog` shim globally, and it runs `dist/cli.js` from this checkout.
-- When you change `src/**`, re-run `npm run build` so `dist/` stays in sync (this also keeps the post-commit hook using the newest code).
+- `pnpm link --global` installs the `commitdog` shim globally, and it runs `dist/cli.js` from this checkout.
+- When you change `src/**`, re-run `pnpm run build` so `dist/` stays in sync (this also keeps the post-commit hook using the newest code).
 
 ### 3. Initialize CommitDog in Your Repository
 
@@ -160,8 +160,8 @@ This installs a managed `.git/hooks/post-commit` section that runs `commitdog re
 If Husky is not already configured in your project, install it and run the initialization:
 
 ```bash
-npm install husky --save-dev
-npx husky init
+pnpm add -D husky
+pnpm exec husky init
 ```
 
 ### 2. Configure the post-commit Hook

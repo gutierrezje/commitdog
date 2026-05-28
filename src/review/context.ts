@@ -2,12 +2,14 @@ import { existsSync } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
 import { basename, dirname, extname, join } from "node:path";
 import { execa } from "execa";
+import ts from "typescript";
 import { getLastCommitDiff, getStagedDiff, type DiffFile, type DiffResult } from "../git/diff.js";
 import type { CommitDogConfig } from "../config.js";
 
 const MAX_DIFF_CHARS = 40_000;
 const MAX_FILE_CHARS = 12_000;
 const MAX_RELATED_FILE_CHARS = 6_000;
+const MAX_AST_SYMBOL_CHARS = 8_000;
 const MAX_REFERENCES_PER_TERM = 8;
 const MAX_REFERENCE_TERMS = 8;
 const MAX_REFERENCE_LINE_CHARS = 220;
@@ -24,9 +26,20 @@ export interface ChangedFileContext {
   file: DiffFile;
   imports: string[];
   symbols: string[];
+  changedLines: number[];
+  astSymbols: AstSymbolContext[];
   content?: string;
   truncated: boolean;
   skippedReason?: string;
+}
+
+export interface AstSymbolContext {
+  name: string;
+  kind: string;
+  startLine: number;
+  endLine: number;
+  text: string;
+  truncated: boolean;
 }
 
 export interface RelatedFileContext {
@@ -52,7 +65,10 @@ export async function buildReviewContext(
   _config: CommitDogConfig,
 ): Promise<ReviewContext> {
   const diff = mode === "staged" ? await getStagedDiff() : await getLastCommitDiff();
-  const changedFiles = await Promise.all(diff.files.map((file) => buildChangedFileContext(file)));
+  const changedLines = getChangedLinesByFile(diff.raw);
+  const changedFiles = await Promise.all(
+    diff.files.map((file) => buildChangedFileContext(file, changedLines.get(file.path) ?? [])),
+  );
   const relatedFiles = await buildRelatedFileContexts(diff.files);
   const references = await buildReferenceContexts(changedFiles);
 
@@ -98,11 +114,30 @@ export function renderReviewContext(context: ReviewContext): string {
     }
 
     lines.push("");
-    if (fileContext.content) {
+    if (fileContext.changedLines.length > 0) {
+      lines.push(`Changed lines: ${summarizeLines(fileContext.changedLines)}`);
+      lines.push("");
+    }
+
+    if (fileContext.astSymbols.length > 0) {
+      lines.push("Changed TypeScript AST symbols:");
+      for (const symbol of fileContext.astSymbols) {
+        lines.push(`#### ${symbol.kind} ${symbol.name} (${symbol.startLine}-${symbol.endLine})`);
+        lines.push(fence(symbol.text, languageForPath(fileContext.file.path)));
+        if (symbol.truncated) {
+          lines.push("_Symbol content truncated._");
+        }
+        lines.push("");
+      }
+    }
+
+    if (fileContext.content && fileContext.astSymbols.length === 0) {
       lines.push(fence(fileContext.content, languageForPath(fileContext.file.path)));
       if (fileContext.truncated) {
         lines.push("_File content truncated._");
       }
+    } else if (fileContext.content) {
+      lines.push("_Full file content omitted because changed TypeScript AST symbols are shown._");
     } else {
       lines.push(`_File content skipped: ${fileContext.skippedReason ?? "unavailable"}._`);
     }
@@ -136,12 +171,17 @@ export function renderReviewContext(context: ReviewContext): string {
   return lines.join("\n").trim();
 }
 
-async function buildChangedFileContext(file: DiffFile): Promise<ChangedFileContext> {
+async function buildChangedFileContext(
+  file: DiffFile,
+  changedLines: number[],
+): Promise<ChangedFileContext> {
   if (file.status === "deleted") {
     return {
       file,
       imports: [],
       symbols: [],
+      changedLines,
+      astSymbols: [],
       truncated: false,
       skippedReason: "deleted file",
     };
@@ -153,15 +193,23 @@ async function buildChangedFileContext(file: DiffFile): Promise<ChangedFileConte
       file,
       imports: [],
       symbols: [],
+      changedLines,
+      astSymbols: [],
       truncated: false,
       skippedReason: contentResult.reason,
     };
   }
 
+  const astSymbols = extractAstSymbols(file.path, contentResult.content, changedLines);
   return {
     file,
     imports: extractImports(contentResult.content),
-    symbols: extractSymbols(contentResult.content),
+    symbols: mergeSymbols(
+      extractSymbols(contentResult.content),
+      astSymbols.map((symbol) => symbol.name),
+    ),
+    changedLines,
+    astSymbols,
     content: contentResult.content,
     truncated: contentResult.truncated,
   };
@@ -343,6 +391,194 @@ function extractSymbols(content: string): string[] {
   return [...symbols].slice(0, 30);
 }
 
+function extractAstSymbols(
+  path: string,
+  content: string,
+  changedLines: number[],
+): AstSymbolContext[] {
+  if (!isTypeScriptPath(path) || changedLines.length === 0) {
+    return [];
+  }
+
+  const sourceFile = ts.createSourceFile(path, content, ts.ScriptTarget.Latest, true);
+  const changed = new Set(changedLines);
+  const symbols: AstSymbolContext[] = [];
+
+  const visit = (node: ts.Node) => {
+    const namedNode = getNamedDeclarationNode(node);
+    if (namedNode) {
+      const startLine =
+        sourceFile.getLineAndCharacterOfPosition(namedNode.getStart(sourceFile)).line + 1;
+      const endLine = sourceFile.getLineAndCharacterOfPosition(namedNode.getEnd()).line + 1;
+      if (containsChangedLine(changed, startLine, endLine)) {
+        const text = truncateText(namedNode.getText(sourceFile), MAX_AST_SYMBOL_CHARS);
+        symbols.push({
+          name: getDeclarationName(namedNode),
+          kind: getDeclarationKind(namedNode),
+          startLine,
+          endLine,
+          text: text.text,
+          truncated: text.truncated,
+        });
+      }
+    }
+
+    ts.forEachChild(node, visit);
+  };
+
+  visit(sourceFile);
+  return dedupeAstSymbols(symbols);
+}
+
+function getNamedDeclarationNode(node: ts.Node): ts.Node | undefined {
+  if (
+    ts.isFunctionDeclaration(node) ||
+    ts.isClassDeclaration(node) ||
+    ts.isInterfaceDeclaration(node) ||
+    ts.isTypeAliasDeclaration(node) ||
+    ts.isEnumDeclaration(node) ||
+    ts.isMethodDeclaration(node) ||
+    ts.isPropertyDeclaration(node)
+  ) {
+    return hasIdentifierName(node) ? node : undefined;
+  }
+
+  if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name)) {
+    return findAncestor(node, ts.isVariableStatement) ?? node;
+  }
+
+  return undefined;
+}
+
+function hasIdentifierName(node: ts.Node): node is ts.Node & { name: ts.Identifier } {
+  const name = (node as { name?: ts.Node }).name;
+  return Boolean(name && ts.isIdentifier(name));
+}
+
+function findAncestor<T extends ts.Node>(
+  node: ts.Node,
+  predicate: (node: ts.Node) => node is T,
+): T | undefined {
+  let current = node.parent;
+  while (current) {
+    if (predicate(current)) return current;
+    current = current.parent;
+  }
+  return undefined;
+}
+
+function getDeclarationName(node: ts.Node): string {
+  if (ts.isVariableStatement(node)) {
+    return node.declarationList.declarations
+      .map((declaration) => declaration.name.getText())
+      .join(", ");
+  }
+
+  if (hasIdentifierName(node)) {
+    return node.name.text;
+  }
+
+  return "<anonymous>";
+}
+
+function getDeclarationKind(node: ts.Node): string {
+  if (ts.isFunctionDeclaration(node)) return "function";
+  if (ts.isClassDeclaration(node)) return "class";
+  if (ts.isInterfaceDeclaration(node)) return "interface";
+  if (ts.isTypeAliasDeclaration(node)) return "type";
+  if (ts.isEnumDeclaration(node)) return "enum";
+  if (ts.isMethodDeclaration(node)) return "method";
+  if (ts.isPropertyDeclaration(node)) return "property";
+  if (ts.isVariableStatement(node)) return "const";
+  return ts.SyntaxKind[node.kind] ?? "symbol";
+}
+
+function dedupeAstSymbols(symbols: AstSymbolContext[]): AstSymbolContext[] {
+  const seen = new Set<string>();
+  const unique: AstSymbolContext[] = [];
+
+  for (const symbol of symbols.sort((a, b) => a.startLine - b.startLine)) {
+    const key = `${symbol.kind}:${symbol.name}:${symbol.startLine}:${symbol.endLine}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unique.push(symbol);
+  }
+
+  return unique.slice(0, 20);
+}
+
+function containsChangedLine(
+  changedLines: Set<number>,
+  startLine: number,
+  endLine: number,
+): boolean {
+  for (let line = startLine; line <= endLine; line++) {
+    if (changedLines.has(line)) return true;
+  }
+  return false;
+}
+
+function mergeSymbols(...groups: string[][]): string[] {
+  const symbols = new Set<string>();
+  for (const group of groups) {
+    for (const symbol of group) {
+      symbols.add(symbol);
+    }
+  }
+  return [...symbols].slice(0, 30);
+}
+
+function getChangedLinesByFile(rawDiff: string): Map<string, number[]> {
+  const changed = new Map<string, number[]>();
+  let currentPath: string | undefined;
+  let newLine: number | undefined;
+
+  for (const line of rawDiff.split("\n")) {
+    const fileMatch = line.match(/^diff --git a\/(.+) b\/(.+)$/);
+    if (fileMatch) {
+      currentPath = fileMatch[2];
+      continue;
+    }
+
+    if (line.startsWith("rename to ")) {
+      currentPath = line.slice("rename to ".length);
+      continue;
+    }
+
+    const hunkMatch = line.match(/^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
+    if (hunkMatch) {
+      newLine = Number(hunkMatch[1]);
+      continue;
+    }
+
+    if (!currentPath || newLine === undefined) continue;
+
+    if (line.startsWith("+++")) {
+      continue;
+    }
+
+    if (line.startsWith("+")) {
+      const lines = changed.get(currentPath) ?? [];
+      lines.push(newLine);
+      changed.set(currentPath, lines);
+      newLine++;
+      continue;
+    }
+
+    if (line.startsWith("-")) {
+      continue;
+    }
+
+    newLine++;
+  }
+
+  return changed;
+}
+
+function summarizeLines(lines: number[]): string {
+  return [...new Set(lines)].sort((a, b) => a - b).join(", ");
+}
+
 function testCandidates(path: string): string[] {
   const dir = dirname(path);
   const ext = extname(path);
@@ -377,4 +613,8 @@ function languageForPath(path: string): string {
   if (ext === "md") return "md";
   if (ext === "yml" || ext === "yaml") return "yaml";
   return "";
+}
+
+function isTypeScriptPath(path: string): boolean {
+  return path.endsWith(".ts") || path.endsWith(".tsx");
 }
