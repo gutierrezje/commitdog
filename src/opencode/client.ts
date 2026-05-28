@@ -71,7 +71,7 @@ export async function runReview(options: ReviewOptions): Promise<ReviewReport> {
       () => {
         if (!settled) {
           settled = true;
-          resolve(fullResponse || "Review timed out.");
+          reject(new Error("Review timed out."));
         }
       },
       5 * 60 * 1000,
@@ -96,6 +96,15 @@ export async function runReview(options: ReviewOptions): Promise<ReviewReport> {
               // Instead we accumulate the full response and then parse the JSON payload.
               if (text.length > fullResponse.length) {
                 fullResponse = text;
+              }
+
+              // Some OpenCode sessions never emit `session.idle` (or it can be missed).
+              // If we already have a complete JSON payload, finish immediately.
+              if (!settled && looksLikeCompleteStructuredReview(fullResponse)) {
+                settled = true;
+                clearTimeout(safetyTimeout);
+                resolve(fullResponse);
+                break;
               }
             }
           }
@@ -128,6 +137,18 @@ export async function runReview(options: ReviewOptions): Promise<ReviewReport> {
               resolve(fullResponse);
               break;
             }
+          }
+        }
+
+        // If the stream ends without throwing and without emitting `session.idle`,
+        // we must still settle. Otherwise the caller can hang indefinitely.
+        if (!settled) {
+          settled = true;
+          clearTimeout(safetyTimeout);
+          if (fullResponse.length > 0) {
+            resolve(fullResponse);
+          } else {
+            reject(new Error("OpenCode event stream ended before any review text was received."));
           }
         }
       } catch (streamErr) {
@@ -290,4 +311,28 @@ function parseStructuredReview(raw: string): ReviewReport {
     summary,
     findings,
   };
+}
+
+function looksLikeCompleteStructuredReview(text: string): boolean {
+  const marker = "FINAL_REVIEW_JSON";
+  const markerIndex = text.indexOf(marker);
+  if (markerIndex === -1) return false;
+
+  const afterMarker = text.slice(markerIndex + marker.length);
+  const firstBrace = afterMarker.indexOf("{");
+  const lastBrace = afterMarker.lastIndexOf("}");
+  if (firstBrace === -1 || lastBrace === -1 || lastBrace <= firstBrace) return false;
+
+  const jsonText = afterMarker.slice(firstBrace, lastBrace + 1);
+  try {
+    const parsed = JSON.parse(jsonText);
+    return (
+      parsed &&
+      typeof parsed === "object" &&
+      typeof (parsed as any).summary === "string" &&
+      Array.isArray((parsed as any).findings)
+    );
+  } catch {
+    return false;
+  }
 }

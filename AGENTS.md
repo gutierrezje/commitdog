@@ -61,7 +61,7 @@ Local AI code review CLI. Orchestrates headless OpenCode server, delegates repo 
   - `commitdog review`
 
 - **Dogfood hook mode** (non-blocking post-commit review):
-  - Install: `npx commitdog hook install`
+  - Install: `commitdog hook install`
   - Make a commit as usual; the hook should run `commitdog review --hook` and write `.commitdog/reviews/latest.md`
 
 - **Keeping the hook on the latest code while developing CommitDog**:

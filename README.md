@@ -47,6 +47,23 @@ Link the package globally:
 npm link
 ```
 
+### Developing / dogfooding CommitDog (on this repo)
+
+If you’re working on CommitDog itself, the simplest loop is:
+
+```bash
+# after editing src/**
+npm run build
+
+# review your staged changes
+git add -p
+commitdog review --staged
+```
+
+Notes:
+- `npm link` installs the `commitdog` shim globally, and it runs `dist/cli.js` from this checkout.
+- When you change `src/**`, re-run `npm run build` so `dist/` stays in sync (this also keeps the post-commit hook using the newest code).
+
 ### 3. Initialize CommitDog in Your Repository
 
 To set up CommitDog for your project, run:
@@ -125,7 +142,17 @@ commitdog server stop
 
 ## Auto Run After Committing
 
-You can set CommitDog up with a hook system so it runs automatically in the background after you commit. For example, to use is with Husky, follow these steps:
+You can set CommitDog up to run automatically in the background after you commit.
+
+### Option A: Built-in git hook installer (recommended)
+
+```bash
+commitdog hook install
+```
+
+This installs a managed `.git/hooks/post-commit` section that runs `commitdog review --hook` via `nohup` and logs to `.commitdog/hook.log`.
+
+### Option B: Husky
 
 ### 1. Install & Initialize Husky
 
