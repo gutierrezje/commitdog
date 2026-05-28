@@ -1,0 +1,15 @@
+model: openai/gpt-4o
+server:
+  port: 4096
+  auto_start: true
+include:
+  - "**/*"
+exclude:
+  - "**/*.test.*"
+  - "**/*.spec.*"
+  - "**/*.lock"
+  - "**/node_modules/**"
+  - "**/dist/**"
+  - "**/build/**"
+  - "**/.git/**"
+rules: []

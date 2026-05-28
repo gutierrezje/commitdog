@@ -1,0 +1,37 @@
+{
+  "name": "commitdog",
+  "version": "0.1.0",
+  "description": "🐕 Local AI code review agent powered by OpenCode",
+  "type": "module",
+  "bin": {
+    "commitdog": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "lint": "tsc --noEmit"
+  },
+  "keywords": [
+    "code-review",
+    "ai",
+    "git",
+    "opencode",
+    "pre-commit"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "@opencode-ai/sdk": "^1.15.11",
+    "chalk": "^5.6.2",
+    "commander": "^14.0.3",
+    "execa": "^9.6.1",
+    "ora": "^9.4.0",
+    "yaml": "^2.9.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.1",
+    "tsup": "^8.5.1",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.7"
+  }
+}
