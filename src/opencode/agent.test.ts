@@ -10,4 +10,11 @@ describe("buildReviewPrompt", () => {
     expect(prompt).toContain("Use this context first");
     expect(prompt).toContain("Only call tools for narrow follow-up");
   });
+
+  it("disables tool follow-up in quick mode", () => {
+    const prompt = buildReviewPrompt("staged", [], undefined, undefined, "LOCAL CONTEXT", true);
+
+    expect(prompt).toContain("Quick mode is enabled");
+    expect(prompt).toContain("do not call tools");
+  });
 });

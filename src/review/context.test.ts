@@ -126,4 +126,52 @@ describe("buildReviewContext", () => {
     expect(rendered).toContain("Skipped by include/exclude rules");
     expect(rendered).not.toContain("packages:");
   });
+
+  it("renders a smaller quick context without related files or references", async () => {
+    const root = await mkdtemp(join(tmpdir(), "commitdog-context-"));
+    tempDirs.push(root);
+    process.chdir(root);
+
+    await execa("git", ["init"]);
+    await mkdir("src");
+    await writeFile(
+      "src/example.ts",
+      ["export function calculateTotal(value: number) {", "  return value + 1;", "}", ""].join(
+        "\n",
+      ),
+      "utf-8",
+    );
+    await writeFile(
+      "src/example.test.ts",
+      "import { calculateTotal } from './example.js';\n",
+      "utf-8",
+    );
+    await execa("git", ["add", "."]);
+    await execa("git", [
+      "-c",
+      "user.name=CommitDog Test",
+      "-c",
+      "user.email=commitdog@example.test",
+      "commit",
+      "-m",
+      "initial",
+    ]);
+
+    await writeFile(
+      "src/example.ts",
+      ["export function calculateTotal(value: number) {", "  return value + 2;", "}", ""].join(
+        "\n",
+      ),
+      "utf-8",
+    );
+    await execa("git", ["add", "src/example.ts"]);
+
+    const context = await buildReviewContext("staged", config);
+    const rendered = renderReviewContext(context, { quick: true });
+
+    expect(rendered).toContain("Review depth: quick");
+    expect(rendered).toContain("Changed TypeScript AST symbols");
+    expect(rendered).not.toContain("Related Test Files");
+    expect(rendered).not.toContain("Reference Hints");
+  });
 });

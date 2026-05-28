@@ -37,6 +37,7 @@ program
   .description("Review the last commit or staged changes")
   .option("--staged", "Review staged changes instead of last commit")
   .option("--hook", "Running from git hook (non-blocking mode)")
+  .option("--quick", "Use a smaller local-only review prompt")
   .action(async (options) => {
     const totalStart = performance.now();
     const timings: ReviewTiming[] = [];
@@ -88,7 +89,7 @@ program
       }
 
       const contextRenderStart = performance.now();
-      const localContext = renderReviewContext(reviewContext);
+      const localContext = renderReviewContext(reviewContext, { quick: Boolean(options.quick) });
       recordCliTiming(timings, "context-render", "Local review context render", contextRenderStart);
 
       // Ensure server and start review
@@ -103,6 +104,7 @@ program
         mode,
         config,
         localContext,
+        quick: Boolean(options.quick),
         onProgress: (event) => {
           spinner.text = formatReviewProgress(event);
         },

@@ -42,7 +42,8 @@ describe("installHook", () => {
     expect(hook.match(/^#!\/bin\/sh/gm)).toHaveLength(1);
     expect(hook).toContain("nohup");
     expect(hook).toContain("COMMITDOG_LOG_FILE");
-    expect(hook).toContain(" review --hook >>");
+    expect(hook).toContain("review --hook --quick >>");
+    expect(hook).toContain("review started at $(date)");
     expect(hook).not.toContain("commitdog review --hook &");
   });
 });

@@ -10,6 +10,9 @@ const MAX_DIFF_CHARS = 40_000;
 const MAX_FILE_CHARS = 12_000;
 const MAX_RELATED_FILE_CHARS = 6_000;
 const MAX_AST_SYMBOL_CHARS = 8_000;
+const MAX_QUICK_DIFF_CHARS = 12_000;
+const MAX_QUICK_SYMBOL_CHARS = 4_000;
+const MAX_QUICK_FILE_CHARS = 4_000;
 const MAX_REFERENCES_PER_TERM = 8;
 const MAX_REFERENCE_TERMS = 8;
 const MAX_REFERENCE_LINE_CHARS = 220;
@@ -62,6 +65,10 @@ export interface ReferenceMatch {
   text: string;
 }
 
+export interface RenderReviewContextOptions {
+  quick?: boolean;
+}
+
 export async function buildReviewContext(
   mode: "last-commit" | "staged",
   config: CommitDogConfig,
@@ -86,12 +93,19 @@ export async function buildReviewContext(
   };
 }
 
-export function renderReviewContext(context: ReviewContext): string {
+export function renderReviewContext(
+  context: ReviewContext,
+  options: RenderReviewContextOptions = {},
+): string {
+  const quick = Boolean(options.quick);
   const lines: string[] = [];
 
   lines.push("## Local Review Context");
   lines.push("");
   lines.push(`Mode: ${context.mode}`);
+  if (quick) {
+    lines.push("Review depth: quick");
+  }
   lines.push("");
   lines.push("### Changed Files");
   lines.push(context.diff.summary || "No changed files detected.");
@@ -109,7 +123,7 @@ export function renderReviewContext(context: ReviewContext): string {
           context.diff.raw,
           new Set(context.changedFiles.map((fileContext) => fileContext.file.path)),
         ),
-        MAX_DIFF_CHARS,
+        quick ? MAX_QUICK_DIFF_CHARS : MAX_DIFF_CHARS,
       ).text,
       "diff",
     ),
@@ -142,9 +156,14 @@ export function renderReviewContext(context: ReviewContext): string {
 
     if (fileContext.astSymbols.length > 0) {
       lines.push("Changed TypeScript AST symbols:");
-      for (const symbol of fileContext.astSymbols) {
+      for (const symbol of quick ? fileContext.astSymbols.slice(0, 5) : fileContext.astSymbols) {
         lines.push(`#### ${symbol.kind} ${symbol.name} (${symbol.startLine}-${symbol.endLine})`);
-        lines.push(fence(symbol.text, languageForPath(fileContext.file.path)));
+        lines.push(
+          fence(
+            truncateText(symbol.text, quick ? MAX_QUICK_SYMBOL_CHARS : MAX_AST_SYMBOL_CHARS).text,
+            languageForPath(fileContext.file.path),
+          ),
+        );
         if (symbol.truncated) {
           lines.push("_Symbol content truncated._");
         }
@@ -153,7 +172,14 @@ export function renderReviewContext(context: ReviewContext): string {
     }
 
     if (fileContext.content && fileContext.astSymbols.length === 0) {
-      lines.push(fence(fileContext.content, languageForPath(fileContext.file.path)));
+      lines.push(
+        fence(
+          quick
+            ? truncateText(fileContext.content, MAX_QUICK_FILE_CHARS).text
+            : fileContext.content,
+          languageForPath(fileContext.file.path),
+        ),
+      );
       if (fileContext.truncated) {
         lines.push("_File content truncated._");
       }
@@ -165,7 +191,7 @@ export function renderReviewContext(context: ReviewContext): string {
     lines.push("");
   }
 
-  if (context.relatedFiles.length > 0) {
+  if (!quick && context.relatedFiles.length > 0) {
     lines.push("### Related Test Files");
     for (const related of context.relatedFiles) {
       lines.push(`#### ${related.path}`);
@@ -178,7 +204,7 @@ export function renderReviewContext(context: ReviewContext): string {
     }
   }
 
-  if (context.references.length > 0) {
+  if (!quick && context.references.length > 0) {
     lines.push("### Reference Hints");
     for (const reference of context.references) {
       lines.push(`Term: ${reference.term}`);

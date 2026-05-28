@@ -26,6 +26,7 @@ export interface ReviewOptions {
   mode: "last-commit" | "staged";
   config: CommitDogConfig;
   localContext?: string;
+  quick?: boolean;
   onProgress?: (event: ReviewProgressEvent) => void;
 }
 
@@ -48,7 +49,7 @@ export interface ReviewTiming {
  * Creates a session, sends the review prompt, and returns a structured report.
  */
 export async function runReview(options: ReviewOptions): Promise<ReviewReport> {
-  const { mode, config, localContext, onProgress } = options;
+  const { mode, config, localContext, quick, onProgress } = options;
   const port = config.server.port;
   const timings: ReviewTiming[] = [];
 
@@ -85,6 +86,7 @@ export async function runReview(options: ReviewOptions): Promise<ReviewReport> {
     config.include,
     config.exclude,
     localContext,
+    quick,
   );
   recordTiming(timings, onProgress, "prompt-build", "Review prompt build", promptStart);
 
@@ -104,6 +106,8 @@ export async function runReview(options: ReviewOptions): Promise<ReviewReport> {
   const responsePromise = new Promise<string>((resolve, reject) => {
     let settled = false;
     let safetyTimeout: ReturnType<typeof setTimeout>;
+    const assistantMessageIds = new Set<string>();
+    const textPartsByMessageId = new Map<string, string>();
 
     const settle = (outcome: "resolve" | "reject", value: string | Error) => {
       if (settled) return;
@@ -116,6 +120,28 @@ export async function runReview(options: ReviewOptions): Promise<ReviewReport> {
       } else {
         reject(value);
       }
+    };
+
+    const acceptAssistantText = (text: string) => {
+      // We intentionally do NOT stream partial chunks to stdout.
+      // Instead we accumulate the full response and then parse the JSON payload.
+      if (text.length > fullResponse.length) {
+        fullResponse = text;
+        onProgress?.({
+          type: "output",
+          message: `Review response received (${fullResponse.length} chars).`,
+          characters: fullResponse.length,
+        });
+      }
+
+      // Some OpenCode sessions never emit `session.idle` (or it can be missed).
+      // If we already have a complete JSON payload, finish immediately.
+      if (looksLikeCompleteStructuredReview(fullResponse)) {
+        settle("resolve", fullResponse);
+        return true;
+      }
+
+      return false;
     };
 
     // Safety timeout: 5 minutes
@@ -156,21 +182,8 @@ export async function runReview(options: ReviewOptions): Promise<ReviewReport> {
             }
 
             if (part.type === "text" && part.text && typeof part.text === "string") {
-              // We intentionally do NOT stream partial chunks to stdout.
-              // Instead we accumulate the full response and then parse the JSON payload.
-              if (part.text.length > fullResponse.length) {
-                fullResponse = part.text;
-                onProgress?.({
-                  type: "output",
-                  message: `Review response received (${fullResponse.length} chars).`,
-                  characters: fullResponse.length,
-                });
-              }
-
-              // Some OpenCode sessions never emit `session.idle` (or it can be missed).
-              // If we already have a complete JSON payload, finish immediately.
-              if (looksLikeCompleteStructuredReview(fullResponse)) {
-                settle("resolve", fullResponse);
+              textPartsByMessageId.set(part.messageID, part.text);
+              if (assistantMessageIds.has(part.messageID) && acceptAssistantText(part.text)) {
                 break;
               }
             }
@@ -182,9 +195,18 @@ export async function runReview(options: ReviewOptions): Promise<ReviewReport> {
             payload.properties?.info?.sessionID === sessionId
           ) {
             const msg = payload.properties?.info;
-            if (msg?.role === "assistant" && msg.error) {
-              settle("reject", new Error(msg.error.data?.message || "Review failed"));
-              break;
+            if (msg?.role === "assistant") {
+              assistantMessageIds.add(msg.id);
+
+              const text = textPartsByMessageId.get(msg.id);
+              if (text && acceptAssistantText(text)) {
+                break;
+              }
+
+              if (msg.error) {
+                settle("reject", new Error(msg.error.data?.message || "Review failed"));
+                break;
+              }
             }
           }
 

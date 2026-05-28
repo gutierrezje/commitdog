@@ -130,9 +130,9 @@ echo "commitdog: review started in background; log: $COMMITDOG_LOG_FILE; latest 
 echo "commitdog: review started at $(date); latest report: .commitdog/reviews/latest.md" >>"$COMMITDOG_LOG_FILE"
 
 if [ -x ${quotedCommitDog} ]; then
-  nohup ${quotedCommitDog} review --hook >>"$COMMITDOG_LOG_FILE" 2>&1 </dev/null &
+  nohup ${quotedCommitDog} review --hook --quick >>"$COMMITDOG_LOG_FILE" 2>&1 </dev/null &
 elif command -v commitdog >/dev/null 2>&1; then
-  nohup commitdog review --hook >>"$COMMITDOG_LOG_FILE" 2>&1 </dev/null &
+  nohup commitdog review --hook --quick >>"$COMMITDOG_LOG_FILE" 2>&1 </dev/null &
 fi
 ${HOOK_END_MARKER}
 `;
