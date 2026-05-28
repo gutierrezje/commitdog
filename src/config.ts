@@ -1,6 +1,6 @@
 import { access, readFile, writeFile, mkdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { join, dirname } from "node:path";
 import { parse, stringify } from "yaml";
 
 export interface CommitDogConfig {
