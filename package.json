@@ -1,7 +1,7 @@
 {
   "name": "commitdog",
   "version": "0.1.0",
-  "description": "🐕 Local AI code review agent powered by OpenCode",
+  "description": "Local AI code review agent powered by OpenCode",
   "type": "module",
   "bin": {
     "commitdog": "./dist/cli.js"

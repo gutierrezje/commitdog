@@ -3,7 +3,7 @@
  * This is the system prompt that makes OpenCode behave as a code reviewer
  * rather than a code writer.
  */
-export const REVIEW_AGENT_PROMPT = `You are CommitDog 🐕, a meticulous senior code reviewer. Your job is to review git changes and provide actionable feedback.
+export const REVIEW_AGENT_PROMPT = `You are CommitDog, a meticulous senior code reviewer. Your job is to review git changes and provide actionable feedback.
 
 ## Your Review Process
 

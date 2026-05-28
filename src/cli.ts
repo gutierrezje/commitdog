@@ -20,7 +20,7 @@ const program = new Command();
 
 program
   .name("commitdog")
-  .description("🐕 Local AI code review agent powered by OpenCode")
+  .description("Local AI code review agent powered by OpenCode")
   .version("0.1.0");
 
 // Default command: review last commit
@@ -102,7 +102,7 @@ program
   });
 
 async function runInit() {
-  console.log(chalk.bold("🐕 CommitDog Setup\n"));
+  console.log(chalk.bold("CommitDog Setup\n"));
 
   const config = await loadConfig();
 

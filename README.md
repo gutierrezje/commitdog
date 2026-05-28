@@ -1,24 +1,24 @@
-# 🐕 CommitDog
+# CommitDog
 
 > **Local AI Code Review Agent powered by [OpenCode](https://opencode.ai)**
 > Build-time quality reviews, running locally, on your own terms.
 
-CommitDog is a thin, extremely fast CLI that hooks into your Git workflow to provide CodeRabbit-quality code reviews locally. Instead of rebuilding LLM logic or managing API integrations from scratch, CommitDog orchestrates a headless [OpenCode Server](https://opencode.ai/docs/server/) session and lets the local agent explore your codebase using its own advanced tools.
+CommitDog is a lightweight CLI that integrates into your Git workflow to provide high-quality code reviews locally. Instead of rebuilding LLM integrations or managing provider keys from scratch, CommitDog orchestrates a headless [OpenCode Server](https://opencode.ai/docs/server/) session and delegates the repository analysis to the local agent, which uses its own advanced reasoning and file tools.
 
 ---
 
-## ✨ Features
+## Features
 
-- **🧠 Powered by OpenCode**: Reuses OpenCode's comprehensive local environment, 75+ model integrations, tool use, and codebase index.
-- **⚡ Non-Blocking Git Hooks**: Reviews run asynchronously in a separate terminal tab or in the background when committing. It will never slow down your `git commit` or `git push`.
-- **🎯 Intelligent File Filtering**: Supports `include` and `exclude` glob patterns to focus reviews on source directories while skipping build artifacts, lockfiles, and node modules.
-- **🛠️ Project-Specific Rules**: Inject custom guidelines directly into the reviewer's system prompt (e.g., "Check for SQL injection", "Ensure TypeScript types are explicit").
-- **💻 Interactive Setup & Model Selector**: Automatically queries OpenCode to present an interactive list of your connected providers and models.
-- **📄 Markdown Reports**: Generates comprehensive markdown reviews and saves them locally under `.commitdog/reviews/` for easy viewing.
+- **Powered by OpenCode**: Integrates seamlessly with OpenCode's local environment, supporting 75+ AI models, tool use, and codebase indexing.
+- **Non-Blocking Git Hooks**: Runs asynchronously in the background. It will never slow down or block your `git commit` or `git push` operations.
+- **Intelligent File Filtering**: Supports `include` and `exclude` glob patterns to focus reviews on source directories while skipping build artifacts, lockfiles, and node modules.
+- **Project-Specific Rules**: Inject custom guidelines directly into the reviewer's system prompt (e.g., "Check for SQL injection", "Ensure TypeScript types are explicit").
+- **Interactive Model Selector**: Automatically queries OpenCode to present a clean, interactive list of your connected providers and models.
+- **Local Reports**: Generates comprehensive markdown reviews and saves them locally under `.commitdog/reviews/` for easy viewing.
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
 ### 1. Prerequisites
 
@@ -27,11 +27,11 @@ CommitDog is a thin, extremely fast CLI that hooks into your Git workflow to pro
    npm i -g opencode-ai
    ```
 2. **Set up a Provider & Model**:
-   Run `opencode` in your terminal, connect a provider (e.g., GitHub Copilot, OpenAI, Ollama, etc.), and verify it's active.
+   Run `opencode` in your terminal, connect a provider (e.g., GitHub Copilot, OpenAI, Ollama, etc.), and verify it is active.
 
 ### 2. Install CommitDog
 
-Clone the repository and install dependencies locally, or run the built CLI:
+Clone the repository and install dependencies locally, or build the CLI:
 
 ```bash
 # Clone and build
@@ -41,7 +41,7 @@ npm install
 npm run build
 ```
 
-Link or run it globally:
+Link the package globally:
 ```bash
 npm link
 ```
@@ -57,12 +57,12 @@ commitdog init
 This will:
 1. Start an OpenCode server (if not already running).
 2. Fetch your connected providers and active models.
-3. Let you interactively select the model you want to use.
+3. Allow you to select a model interactively.
 4. Generate a `.commitdog.yml` configuration file in the project root.
 
 ---
 
-## 📖 CLI Reference
+## CLI Reference
 
 ### `commitdog` (or `commitdog review`)
 Runs a code review on your repository.
@@ -113,7 +113,30 @@ commitdog server stop
 
 ---
 
-## ⚙️ Configuration (`.commitdog.yml`)
+## Auto Run After Committing
+
+You can set CommitDog up with a hook system so it runs automatically in the background after you commit. For example, to use is with Husky, follow these steps:
+
+### 1. Install & Initialize Husky
+If Husky is not already configured in your project, install it and run the initialization:
+
+```bash
+npm install husky --save-dev
+npx husky init
+```
+
+### 2. Configure the post-commit Hook
+Create or edit the `post-commit` hook in your `.husky/` directory to execute CommitDog in background mode:
+
+```bash
+echo "commitdog review --hook &" > .husky/post-commit
+```
+
+*Note: The trailing `&` is required. It forks the `commitdog` process into the background, returning control to your terminal instantly so your `git commit` completes without delay.*
+
+---
+
+## Configuration (`.commitdog.yml`)
 
 Your `.commitdog.yml` configures everything for CommitDog in your project:
 
@@ -148,6 +171,6 @@ rules:
 
 ---
 
-## 🛡️ License
+## License
 
 MIT © [Jesus](https://github.com/jesus)

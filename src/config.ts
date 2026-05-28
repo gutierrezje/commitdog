@@ -1,4 +1,4 @@
-import { readFile, writeFile, mkdir } from "node:fs/promises";
+import { access, readFile, writeFile, mkdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { parse, stringify } from "yaml";
@@ -61,13 +61,14 @@ export async function loadConfig(): Promise<CommitDogConfig> {
       ...parsed,
       server: { ...DEFAULT_CONFIG.server, ...parsed.server },
     };
-  } catch {
-    return { ...DEFAULT_CONFIG };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    throw new Error(`Failed to load ${configPath}: ${message}`);
   }
 }
 
 export async function saveConfig(config: CommitDogConfig): Promise<string> {
-  const configPath = join(process.cwd(), CONFIG_FILENAME);
+  const configPath = findConfigPath();
   const content = stringify(config, { lineWidth: 0 });
   await writeFile(configPath, content, "utf-8");
   return configPath;
@@ -75,7 +76,9 @@ export async function saveConfig(config: CommitDogConfig): Promise<string> {
 
 export async function ensureCommitDogDir(): Promise<string> {
   const dir = join(process.cwd(), ".commitdog");
-  if (!existsSync(dir)) {
+  try {
+    await access(dir);
+  } catch {
     await mkdir(dir, { recursive: true });
   }
   return dir;

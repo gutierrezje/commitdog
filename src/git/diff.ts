@@ -13,15 +13,13 @@ export interface DiffFile {
   deletions: number;
 }
 
-/**
- * Get the diff for the last commit (HEAD~1..HEAD)
- */
 export async function getLastCommitDiff(): Promise<DiffResult> {
   const { stdout: raw } = await execa("git", [
-    "diff",
-    "HEAD~1..HEAD",
+    "show",
+    "--format=",
     "--stat",
     "--patch",
+    "HEAD",
   ]);
   return parseDiff(raw);
 }
@@ -48,7 +46,7 @@ export async function getDiffSummary(
   const args =
     mode === "staged"
       ? ["diff", "--staged", "--stat"]
-      : ["diff", "HEAD~1..HEAD", "--stat"];
+      : ["show", "--format=", "--stat", "HEAD"];
   const { stdout } = await execa("git", args);
   return stdout;
 }
@@ -118,6 +116,12 @@ function parseDiff(raw: string): DiffResult {
       continue;
     }
 
+    if (line.startsWith("rename to ") && files.length > 0) {
+      files[files.length - 1].path = line.slice("rename to ".length);
+      files[files.length - 1].status = "renamed";
+      continue;
+    }
+
     // Detect new files
     if (line === "--- /dev/null" && files.length > 0) {
       files[files.length - 1].status = "added";
@@ -143,9 +147,22 @@ function parseDiff(raw: string): DiffResult {
   const summary = files
     .map(
       (f) =>
-        `${f.status === "added" ? "+" : f.status === "deleted" ? "-" : "~"} ${f.path} (+${f.additions}/-${f.deletions})`
+        `${statusSymbol(f.status)} ${f.path} (+${f.additions}/-${f.deletions})`
     )
     .join("\n");
 
   return { files, raw, summary };
+}
+
+function statusSymbol(status: DiffFile["status"]): string {
+  switch (status) {
+    case "added":
+      return "+";
+    case "deleted":
+      return "-";
+    case "renamed":
+      return ">";
+    default:
+      return "~";
+  }
 }

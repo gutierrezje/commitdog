@@ -16,7 +16,7 @@ export async function writeMarkdownReport(review: string): Promise<string> {
   const filename = `review-${timestamp}.md`;
   const filepath = join(dir, filename);
 
-  const content = `# 🐕 CommitDog Review
+  const content = `# CommitDog Review
 _${new Date().toLocaleString()}_
 
 ${review}
@@ -36,7 +36,7 @@ ${review}
  */
 export function printHeader(): void {
   console.log();
-  console.log(chalk.bold("🐕 commitdog") + chalk.dim(" reviewing..."));
+  console.log(chalk.bold("commitdog") + chalk.dim(" reviewing..."));
   console.log(chalk.dim("─".repeat(50)));
   console.log();
 }
@@ -67,7 +67,7 @@ export function printFooter(review: string, reportPath?: string): void {
   if (infos > 0) parts.push(chalk.blue(`${infos} suggestion${infos > 1 ? "s" : ""}`));
 
   if (parts.length === 0) {
-    console.log(chalk.green("✓ No issues found. Clean commit! 🎉"));
+    console.log(chalk.green("✓ No issues found. Clean commit!"));
   } else {
     console.log(`Found ${parts.join(", ")}`);
   }
@@ -81,11 +81,19 @@ export function printFooter(review: string, reportPath?: string): void {
 /**
  * Basic markdown colorization for terminal output
  */
-function colorizeMarkdown(text: string): string {
+export function colorizeMarkdown(text: string): string {
   return text
-    .replace(/\*\*\[ERROR\]/g, chalk.red.bold("⛔ [ERROR]"))
-    .replace(/\*\*\[WARNING\]/g, chalk.yellow.bold("⚠️  [WARNING]"))
-    .replace(/\*\*\[INFO\]/g, chalk.blue.bold("💡 [INFO]"))
-    .replace(/### (.*)/g, chalk.bold.underline("$1"))
-    .replace(/\*\*([^*]+)\*\*/g, chalk.bold("$1"));
+    .replace(/\*\*\[(ERROR)\]\*\*/g, (_match, label: string) =>
+      chalk.red.bold(`[${label}]`)
+    )
+    .replace(/\*\*\[(WARNING)\]\*\*/g, (_match, label: string) =>
+      chalk.yellow.bold(`[${label}]`)
+    )
+    .replace(/\*\*\[(INFO)\]\*\*/g, (_match, label: string) =>
+      chalk.blue.bold(`[${label}]`)
+    )
+    .replace(/### (.*)/g, (_match, title: string) => chalk.bold.underline(title))
+    .replace(/\*\*([^*]+)\*\*/g, (_match, content: string) =>
+      chalk.bold(content)
+    );
 }
