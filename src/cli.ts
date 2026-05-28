@@ -76,6 +76,9 @@ program
       // Write markdown report
       const reportPath = await writeMarkdownReport(review);
       printFooter(review, reportPath);
+      if (options.hook) {
+        process.exit(0);
+      }
     } catch (err) {
       spinner.stop();
       const message = err instanceof Error ? err.message : String(err);
