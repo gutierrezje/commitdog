@@ -2,6 +2,39 @@ import chalk from "chalk";
 import { writeFile, mkdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import type { ReviewReport } from "../opencode/client.js";
+
+/**
+ * Render a structured review into the markdown format we persist.
+ */
+export function renderMarkdown(report: ReviewReport): string {
+  const lines: string[] = [];
+
+  lines.push("### Summary");
+  lines.push(report.summary.trim() || "No summary provided.");
+  lines.push("");
+
+  lines.push("### Issues Found");
+
+  if (report.findings.length === 0) {
+    lines.push("No issues were reported.");
+  } else {
+    for (const finding of report.findings) {
+      lines.push(`**[${finding.severity.toUpperCase()}] ${finding.file}:${finding.line}**`);
+      lines.push(finding.title.trim());
+      lines.push("");
+      lines.push(finding.body.trim());
+      lines.push("");
+    }
+  }
+
+  lines.push("### What Looks Good");
+  lines.push(
+    "The reviewer did not flag additional issues beyond those listed above.",
+  );
+
+  return lines.join("\n");
+}
 
 /**
  * Format and write the review output as a markdown file
@@ -52,14 +85,27 @@ export function printChunk(text: string): void {
 /**
  * Print the review footer with summary
  */
-export function printFooter(review: string, reportPath?: string): void {
+export function printFooter(report: ReviewReport, reportPath?: string): void {
   console.log();
   console.log(chalk.dim("─".repeat(50)));
 
-  // Count issues
-  const errors = (review.match(/\[ERROR\]/g) || []).length;
-  const warnings = (review.match(/\[WARNING\]/g) || []).length;
-  const infos = (review.match(/\[INFO\]/g) || []).length;
+  let errors = 0;
+  let warnings = 0;
+  let infos = 0;
+
+  for (const finding of report.findings) {
+    switch (finding.severity) {
+      case "error":
+        errors++;
+        break;
+      case "warning":
+        warnings++;
+        break;
+      case "info":
+        infos++;
+        break;
+    }
+  }
 
   const parts: string[] = [];
   if (errors > 0) parts.push(chalk.red(`${errors} error${errors > 1 ? "s" : ""}`));

@@ -5,11 +5,17 @@ import chalk from "chalk";
 import ora from "ora";
 import { createInterface } from "node:readline/promises";
 import { loadConfig, saveConfig, configExists, type CommitDogConfig } from "./config.js";
-import { runReview, getAvailableModels } from "./opencode/client.js";
+import { runReview, getAvailableModels, type ReviewReport } from "./opencode/client.js";
 import { ensureServer, isServerRunning, stopServer } from "./opencode/server.js";
 import { installHook, uninstallHook, isHookInstalled } from "./git/hooks.js";
 import { isGitRepo, hasCommits, getStagedDiff } from "./git/diff.js";
-import { printHeader, printChunk, printFooter, writeMarkdownReport } from "./review/formatter.js";
+import {
+  printHeader,
+  printFooter,
+  writeMarkdownReport,
+  renderMarkdown,
+  colorizeMarkdown,
+} from "./review/formatter.js";
 
 const program = new Command();
 
@@ -67,15 +73,20 @@ program
       spinner.stop();
       console.log(); // Space after spinner
 
-      const review = await runReview({
+      const report: ReviewReport = await runReview({
         mode,
         config,
-        onChunk: (chunk) => printChunk(chunk),
       });
 
+      const markdown = renderMarkdown(report);
+
       // Write markdown report
-      const reportPath = await writeMarkdownReport(review);
-      printFooter(review, reportPath);
+      const reportPath = await writeMarkdownReport(markdown);
+
+      // Print the rendered, colorized markdown to stdout
+      console.log(colorizeMarkdown(markdown));
+
+      printFooter(report, reportPath);
       if (options.hook) {
         process.exit(0);
       }

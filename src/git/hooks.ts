@@ -76,13 +76,11 @@ export async function isHookInstalled(): Promise<boolean> {
 
 interface HookCommand {
   commitdog: string;
-  node: string;
 }
 
 async function resolveHookCommand(): Promise<HookCommand> {
   return {
     commitdog: await resolveCommand("commitdog"),
-    node: await resolveCommand("node"),
   };
 }
 
@@ -122,15 +120,14 @@ ${generateManagedSection(command)}`;
 
 function generateManagedSection(command: HookCommand): string {
   const quotedCommitDog = shellQuote(command.commitdog);
-  const quotedNode = shellQuote(command.node);
   return `${HOOK_MARKER}
 # Run commitdog review in the background (non-blocking)
 COMMITDOG_LOG_DIR=".commitdog"
 COMMITDOG_LOG_FILE="$COMMITDOG_LOG_DIR/hook.log"
 mkdir -p "$COMMITDOG_LOG_DIR"
 
-if [ -x ${quotedNode} ] && [ -x ${quotedCommitDog} ]; then
-  nohup ${quotedNode} ${quotedCommitDog} review --hook >>"$COMMITDOG_LOG_FILE" 2>&1 </dev/null &
+if [ -x ${quotedCommitDog} ]; then
+  nohup ${quotedCommitDog} review --hook >>"$COMMITDOG_LOG_FILE" 2>&1 </dev/null &
 elif command -v commitdog >/dev/null 2>&1; then
   nohup commitdog review --hook >>"$COMMITDOG_LOG_FILE" 2>&1 </dev/null &
 fi

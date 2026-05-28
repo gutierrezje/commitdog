@@ -42,3 +42,28 @@ Local AI code review CLI. Orchestrates headless OpenCode server, delegates repo 
 - `spawnServer` writes PID to `.commitdog/server.pid`; `stopServer` reads it. PID reuse edge case unhandled.
 - Hook script uses `shellQuote` with single-quote escaping. Never inject unsanitized paths.
 - `buildReviewPrompt` concatenates user-supplied `rules` and glob patterns directly into prompt. No sanitization — assume trusted config.
+
+## Dogfooding (run locally, then commit)
+
+- **One-time setup**:
+  - `npm install`
+  - `npm run build`
+  - `npm link` (installs the `commitdog` binary on your PATH)
+  - `commitdog init` (creates `.commitdog.yml` and selects a model)
+
+- **Review staged changes (recommended loop)**:
+  - Stage your work: `git add -p` (or `git add .`)
+  - Run: `commitdog review --staged`
+  - Read: `.commitdog/reviews/latest.md`
+  - Iterate until clean, then commit: `git commit -m "..."` (or your preferred flow)
+
+- **Review last commit**:
+  - `commitdog review`
+
+- **Dogfood hook mode** (non-blocking post-commit review):
+  - Install: `npx commitdog hook install`
+  - Make a commit as usual; the hook should run `commitdog review --hook` and write `.commitdog/reviews/latest.md`
+
+- **Keeping the hook on the latest code while developing CommitDog**:
+  - After changing `src/**`, re-run `npm run build` so `dist/cli.js` is up to date.
+  - If you’re using `npm link`, the `commitdog` shim will pick up the updated `dist/cli.js` after rebuilding.
