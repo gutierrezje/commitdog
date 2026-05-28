@@ -13,11 +13,13 @@ const MAX_AST_SYMBOL_CHARS = 8_000;
 const MAX_REFERENCES_PER_TERM = 8;
 const MAX_REFERENCE_TERMS = 8;
 const MAX_REFERENCE_LINE_CHARS = 220;
+const LOCKFILE_EXCLUDES = ["package-lock.json", "pnpm-lock.yaml", "yarn.lock", "bun.lockb"];
 
 export interface ReviewContext {
   mode: "last-commit" | "staged";
   diff: DiffResult;
   changedFiles: ChangedFileContext[];
+  skippedFiles: DiffFile[];
   relatedFiles: RelatedFileContext[];
   references: ReferenceContext[];
 }
@@ -62,20 +64,23 @@ export interface ReferenceMatch {
 
 export async function buildReviewContext(
   mode: "last-commit" | "staged",
-  _config: CommitDogConfig,
+  config: CommitDogConfig,
 ): Promise<ReviewContext> {
   const diff = mode === "staged" ? await getStagedDiff() : await getLastCommitDiff();
+  const reviewableFiles = diff.files.filter((file) => shouldReviewFile(file.path, config));
+  const skippedFiles = diff.files.filter((file) => !shouldReviewFile(file.path, config));
   const changedLines = getChangedLinesByFile(diff.raw);
   const changedFiles = await Promise.all(
-    diff.files.map((file) => buildChangedFileContext(file, changedLines.get(file.path) ?? [])),
+    reviewableFiles.map((file) => buildChangedFileContext(file, changedLines.get(file.path) ?? [])),
   );
-  const relatedFiles = await buildRelatedFileContexts(diff.files);
-  const references = await buildReferenceContexts(changedFiles);
+  const relatedFiles = await buildRelatedFileContexts(reviewableFiles);
+  const references = await buildReferenceContexts(changedFiles, skippedFiles);
 
   return {
     mode,
     diff,
     changedFiles,
+    skippedFiles,
     relatedFiles,
     references,
   };
@@ -90,9 +95,25 @@ export function renderReviewContext(context: ReviewContext): string {
   lines.push("");
   lines.push("### Changed Files");
   lines.push(context.diff.summary || "No changed files detected.");
+  if (context.skippedFiles.length > 0) {
+    lines.push("");
+    lines.push("Skipped by include/exclude rules:");
+    lines.push(context.skippedFiles.map((file) => `- ${file.path}`).join("\n"));
+  }
   lines.push("");
   lines.push("### Diff");
-  lines.push(fence(truncateText(context.diff.raw, MAX_DIFF_CHARS).text, "diff"));
+  lines.push(
+    fence(
+      truncateText(
+        filterDiffRaw(
+          context.diff.raw,
+          new Set(context.changedFiles.map((fileContext) => fileContext.file.path)),
+        ),
+        MAX_DIFF_CHARS,
+      ).text,
+      "diff",
+    ),
+  );
   lines.push("");
 
   for (const fileContext of context.changedFiles) {
@@ -243,9 +264,13 @@ async function buildRelatedFileContexts(files: DiffFile[]): Promise<RelatedFileC
 
 async function buildReferenceContexts(
   changedFiles: ChangedFileContext[],
+  skippedFiles: DiffFile[],
 ): Promise<ReferenceContext[]> {
   const terms = new Set<string>();
-  const changedPaths = new Set(changedFiles.map((file) => file.file.path));
+  const ignoredPaths = new Set([
+    ...changedFiles.map((file) => file.file.path),
+    ...skippedFiles.map((file) => file.path),
+  ]);
 
   for (const file of changedFiles) {
     terms.add(basename(file.file.path, extname(file.file.path)));
@@ -258,7 +283,7 @@ async function buildReferenceContexts(
   for (const term of [...terms]
     .filter((value) => value.length >= 3)
     .slice(0, MAX_REFERENCE_TERMS)) {
-    const matches = await findReferences(term, changedPaths);
+    const matches = await findReferences(term, ignoredPaths);
     if (matches.length > 0) {
       references.push({ term, matches });
     }
@@ -339,6 +364,53 @@ function parseReferenceLine(line: string): ReferenceMatch | undefined {
     line: Number(match[2]),
     text: match[3].trim().slice(0, MAX_REFERENCE_LINE_CHARS),
   };
+}
+
+function shouldReviewFile(path: string, config: CommitDogConfig): boolean {
+  if (LOCKFILE_EXCLUDES.includes(path)) return false;
+
+  const include = config.include.length > 0 ? config.include : ["**/*"];
+  if (!include.some((pattern) => matchesGlob(path, pattern))) {
+    return false;
+  }
+
+  return !config.exclude.some((pattern) => matchesGlob(path, pattern));
+}
+
+function matchesGlob(path: string, pattern: string): boolean {
+  if (pattern === "**/*") return true;
+  const regex = new RegExp(`^${escapeGlob(pattern)}$`);
+  return regex.test(path);
+}
+
+function escapeGlob(pattern: string): string {
+  return pattern
+    .replace(/[.+^${}()|[\]\\]/g, "\\$&")
+    .replaceAll("**", "\0")
+    .replaceAll("*", "[^/]*")
+    .replaceAll("\0", ".*");
+}
+
+function filterDiffRaw(rawDiff: string, includedPaths: Set<string>): string {
+  if (includedPaths.size === 0) {
+    return "No included file diffs.";
+  }
+
+  const lines: string[] = [];
+  let includeCurrentFile = false;
+
+  for (const line of rawDiff.split("\n")) {
+    const fileMatch = line.match(/^diff --git a\/(.+) b\/(.+)$/);
+    if (fileMatch) {
+      includeCurrentFile = includedPaths.has(fileMatch[2]);
+    }
+
+    if (includeCurrentFile) {
+      lines.push(line);
+    }
+  }
+
+  return lines.join("\n");
 }
 
 async function readTextFile(

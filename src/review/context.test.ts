@@ -89,4 +89,41 @@ describe("buildReviewContext", () => {
     expect(rendered).toContain("src/consumer.ts");
     expect(rendered).toContain("return value + 2");
   });
+
+  it("skips lockfiles when building prompt context", async () => {
+    const root = await mkdtemp(join(tmpdir(), "commitdog-context-"));
+    tempDirs.push(root);
+    process.chdir(root);
+
+    await execa("git", ["init"]);
+    await writeFile("package.json", '{"name":"fixture"}\n', "utf-8");
+    await writeFile("pnpm-lock.yaml", "lockfileVersion: '9.0'\n", "utf-8");
+    await execa("git", ["add", "."]);
+    await execa("git", [
+      "-c",
+      "user.name=CommitDog Test",
+      "-c",
+      "user.email=commitdog@example.test",
+      "commit",
+      "-m",
+      "initial",
+    ]);
+
+    await writeFile("package.json", '{"name":"fixture","version":"1.0.0"}\n', "utf-8");
+    await writeFile(
+      "pnpm-lock.yaml",
+      ["lockfileVersion: '9.0'", "packages:", "  /large:", "    resolution: {}"].join("\n"),
+      "utf-8",
+    );
+    await execa("git", ["add", "."]);
+
+    const context = await buildReviewContext("staged", config);
+    const rendered = renderReviewContext(context);
+
+    expect(context.changedFiles.map((file) => file.file.path)).toContain("package.json");
+    expect(context.changedFiles.map((file) => file.file.path)).not.toContain("pnpm-lock.yaml");
+    expect(context.skippedFiles.map((file) => file.path)).toContain("pnpm-lock.yaml");
+    expect(rendered).toContain("Skipped by include/exclude rules");
+    expect(rendered).not.toContain("packages:");
+  });
 });
