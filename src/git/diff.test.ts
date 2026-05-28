@@ -130,4 +130,20 @@ describe("parseDiff", () => {
     expect(file.additions).toBe(0);
     expect(file.deletions).toBe(0);
   });
+
+  it("unescapes paths ending with escaped quotes properly", () => {
+    const rawDiffRenameEscapedQuote = [
+      "diff --git a/old.ts b/new.ts",
+      "similarity index 85%",
+      "rename from old.ts",
+      'rename to "src/new_\\""',
+    ].join("\n");
+
+    const result = parseDiff(rawDiffRenameEscapedQuote);
+
+    expect(result.files).toHaveLength(1);
+    const file = result.files[0]!;
+    expect(file.path).toBe('src/new_"');
+    expect(file.status).toBe("renamed");
+  });
 });
