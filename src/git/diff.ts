@@ -76,16 +76,16 @@ export async function hasCommits(): Promise<boolean> {
   }
 }
 
-function parseDiff(raw: string): DiffResult {
+export function parseDiff(raw: string): DiffResult {
   const files: DiffFile[] = [];
   const lines = raw.split("\n");
 
   for (const line of lines) {
     // Parse diff --git a/path b/path
-    const fileMatch = line.match(/^diff --git a\/(.+) b\/(.+)$/);
-    if (fileMatch) {
+    const gitDiffPaths = parseGitDiffLine(line);
+    if (gitDiffPaths) {
       files.push({
-        path: fileMatch[2]!,
+        path: gitDiffPaths.pathB,
         status: "modified",
         additions: 0,
         deletions: 0,
@@ -93,30 +93,44 @@ function parseDiff(raw: string): DiffResult {
       continue;
     }
 
-    if (line.startsWith("rename to ") && files.length > 0) {
-      files[files.length - 1]!.path = line.slice("rename to ".length);
-      files[files.length - 1]!.status = "renamed";
+    // Parse diff --cc path / diff --combined path
+    const combinedPath = parseCombinedDiffLine(line);
+    if (combinedPath) {
+      files.push({
+        path: combinedPath,
+        status: "modified",
+        additions: 0,
+        deletions: 0,
+      });
       continue;
     }
 
-    // Detect new files
-    if (line === "--- /dev/null" && files.length > 0) {
-      files[files.length - 1]!.status = "added";
-      continue;
-    }
+    const lastFile = files[files.length - 1];
+    if (lastFile) {
+      if (line.startsWith("rename to ")) {
+        const target = unescapePath(line.slice("rename to ".length));
+        lastFile.path = target;
+        lastFile.status = "renamed";
+        continue;
+      }
 
-    // Detect deleted files
-    if (line === "+++ /dev/null" && files.length > 0) {
-      files[files.length - 1]!.status = "deleted";
-      continue;
-    }
+      // Detect new files
+      if (line === "--- /dev/null") {
+        lastFile.status = "added";
+        continue;
+      }
 
-    // Count additions/deletions
-    if (files.length > 0) {
+      // Detect deleted files
+      if (line === "+++ /dev/null") {
+        lastFile.status = "deleted";
+        continue;
+      }
+
+      // Count additions/deletions
       if (line.startsWith("+") && !line.startsWith("+++")) {
-        files[files.length - 1]!.additions++;
+        lastFile.additions++;
       } else if (line.startsWith("-") && !line.startsWith("---")) {
-        files[files.length - 1]!.deletions++;
+        lastFile.deletions++;
       }
     }
   }
@@ -126,6 +140,90 @@ function parseDiff(raw: string): DiffResult {
     .join("\n");
 
   return { files, raw, summary };
+}
+
+function parseGitDiffLine(line: string): { pathA: string; pathB: string } | null {
+  if (!line.startsWith("diff --git ")) return null;
+  const content = line.slice("diff --git ".length);
+
+  const paths: string[] = [];
+  let i = 0;
+
+  while (i < content.length && paths.length < 2) {
+    // Skip whitespace
+    while (i < content.length && content[i] === " ") {
+      i++;
+    }
+    if (i >= content.length) break;
+
+    if (content[i] === '"') {
+      // Quoted/Escaped path
+      i++; // Skip open quote
+      let path = "";
+      while (i < content.length) {
+        if (content[i] === '"') {
+          i++; // Skip close quote
+          break;
+        }
+        if (content[i] === "\\" && i + 1 < content.length) {
+          path += content[i + 1] ?? "";
+          i += 2;
+        } else {
+          path += content[i] ?? "";
+          i++;
+        }
+      }
+      paths.push(path);
+    } else {
+      // Unquoted path (extends to next space or end of string)
+      let start = i;
+      while (i < content.length && content[i] !== " ") {
+        i++;
+      }
+      paths.push(content.slice(start, i));
+    }
+  }
+
+  if (paths.length !== 2) return null;
+
+  let pathA = paths[0] ?? "";
+  let pathB = paths[1] ?? "";
+
+  if (pathA.startsWith("a/")) pathA = pathA.slice(2);
+  if (pathB.startsWith("b/")) pathB = pathB.slice(2);
+
+  return { pathA, pathB };
+}
+
+function parseCombinedDiffLine(line: string): string | null {
+  let content = "";
+  if (line.startsWith("diff --cc ")) {
+    content = line.slice("diff --cc ".length);
+  } else if (line.startsWith("diff --combined ")) {
+    content = line.slice("diff --combined ".length);
+  } else {
+    return null;
+  }
+
+  return unescapePath(content);
+}
+
+function unescapePath(content: string): string {
+  if (content.startsWith('"') && content.endsWith('"')) {
+    let path = "";
+    let i = 1;
+    while (i < content.length - 1) {
+      if (content[i] === "\\" && i + 1 < content.length - 1) {
+        path += content[i + 1] ?? "";
+        i += 2;
+      } else {
+        path += content[i] ?? "";
+        i++;
+      }
+    }
+    return path;
+  }
+  return content;
 }
 
 function statusSymbol(status: DiffFile["status"]): string {
