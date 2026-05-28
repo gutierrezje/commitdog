@@ -3,6 +3,7 @@ import { readFile, stat } from "node:fs/promises";
 import { basename, dirname, extname, join } from "node:path";
 import { execa } from "execa";
 import ts from "typescript";
+import picomatch from "picomatch";
 import { getLastCommitDiff, getStagedDiff, type DiffFile, type DiffResult } from "../git/diff.js";
 import type { CommitDogConfig } from "../config.js";
 
@@ -396,25 +397,11 @@ function shouldReviewFile(path: string, config: CommitDogConfig): boolean {
   if (LOCKFILE_EXCLUDES.includes(path)) return false;
 
   const include = config.include.length > 0 ? config.include : ["**/*"];
-  if (!include.some((pattern) => matchesGlob(path, pattern))) {
+  if (!include.some((pattern) => picomatch.isMatch(path, pattern))) {
     return false;
   }
 
-  return !config.exclude.some((pattern) => matchesGlob(path, pattern));
-}
-
-function matchesGlob(path: string, pattern: string): boolean {
-  if (pattern === "**/*") return true;
-  const regex = new RegExp(`^${escapeGlob(pattern)}$`);
-  return regex.test(path);
-}
-
-function escapeGlob(pattern: string): string {
-  return pattern
-    .replace(/[.+^${}()|[\]\\]/g, "\\$&")
-    .replaceAll("**", "\0")
-    .replaceAll("*", "[^/]*")
-    .replaceAll("\0", ".*");
+  return !config.exclude.some((pattern) => picomatch.isMatch(path, pattern));
 }
 
 function filterDiffRaw(rawDiff: string, includedPaths: Set<string>): string {
