@@ -86,36 +86,51 @@ export interface HookStatus {
  * outdated binary path, or changed script logic).
  */
 export async function checkHookStale(): Promise<HookStatus> {
+  let hooksDir: string;
   try {
-    const hooksDir = await getHooksDir();
-    const hookPath = join(hooksDir, "post-commit");
+    hooksDir = await getHooksDir();
+  } catch {
+    return { installed: false, stale: false, reason: "Not a git repository" };
+  }
 
-    if (!existsSync(hookPath)) {
-      return { installed: false, stale: false, reason: "No post-commit hook found" };
-    }
+  const hookPath = join(hooksDir, "post-commit");
 
-    const content = await readFile(hookPath, "utf-8");
-    if (!content.includes(HOOK_MARKER)) {
-      return { installed: false, stale: false, reason: "Hook exists but is not commitdog-managed" };
-    }
+  if (!existsSync(hookPath)) {
+    return { installed: false, stale: false, reason: "No post-commit hook found" };
+  }
 
-    const command = await resolveHookCommand();
-    const expected = generateManagedSection(command);
-    const actual = extractManagedSection(content);
-
-    if (!actual) {
-      return { installed: true, stale: true, reason: "Could not extract managed section" };
-    }
-
-    if (actual.trim() !== expected.trim()) {
-      return { installed: true, stale: true, reason: "Managed section differs from current generator" };
-    }
-
-    return { installed: true, stale: false };
+  let content: string;
+  try {
+    content = await readFile(hookPath, "utf-8");
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    return { installed: false, stale: false, reason: `Cannot read hook file: ${message}` };
+    return { installed: true, stale: false, reason: `Cannot read hook file: ${message}` };
   }
+
+  if (!content.includes(HOOK_MARKER)) {
+    return { installed: false, stale: false, reason: "Hook exists but is not commitdog-managed" };
+  }
+
+  let command: HookCommand;
+  try {
+    command = await resolveHookCommand();
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { installed: true, stale: false, reason: `Cannot resolve commitdog command: ${message}` };
+  }
+
+  const expected = generateManagedSection(command);
+  const actual = extractManagedSection(content);
+
+  if (!actual) {
+    return { installed: true, stale: true, reason: "Could not extract managed section" };
+  }
+
+  if (actual.trim() !== expected.trim()) {
+    return { installed: true, stale: true, reason: "Managed section differs from current generator" };
+  }
+
+  return { installed: true, stale: false };
 }
 
 function extractManagedSection(content: string): string | undefined {
