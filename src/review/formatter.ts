@@ -3,6 +3,7 @@ import { writeFile, mkdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type { ReviewReport } from "../opencode/client.js";
+import { getCommitDogDir } from "../config.js";
 
 /**
  * Render a structured review into the markdown format we persist.
@@ -38,7 +39,7 @@ export function renderMarkdown(report: ReviewReport): string {
  * Format and write the review output as a markdown file
  */
 export async function writeMarkdownReport(review: string): Promise<string> {
-  const dir = join(process.cwd(), ".commitdog", "reviews");
+  const dir = join(getCommitDogDir(), "reviews");
   if (!existsSync(dir)) {
     await mkdir(dir, { recursive: true });
   }

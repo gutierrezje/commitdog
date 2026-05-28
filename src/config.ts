@@ -74,8 +74,14 @@ export async function saveConfig(config: CommitDogConfig): Promise<string> {
   return configPath;
 }
 
+export function getCommitDogDir(): string {
+  const configPath = findConfigPath();
+  const projectRoot = dirname(configPath);
+  return join(projectRoot, ".commitdog");
+}
+
 export async function ensureCommitDogDir(): Promise<string> {
-  const dir = join(process.cwd(), ".commitdog");
+  const dir = getCommitDogDir();
   try {
     await access(dir);
   } catch {

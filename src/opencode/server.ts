@@ -2,7 +2,7 @@ import { execa } from "execa";
 import { existsSync } from "node:fs";
 import { readFile, writeFile, unlink } from "node:fs/promises";
 import { join } from "node:path";
-import { ensureCommitDogDir } from "../config.js";
+import { ensureCommitDogDir, getCommitDogDir } from "../config.js";
 
 const HEALTH_TIMEOUT_MS = 2000;
 const STARTUP_WAIT_MS = 3000;
@@ -94,23 +94,55 @@ async function spawnServer(port: number): Promise<void> {
  * Stop a previously spawned server
  */
 export async function stopServer(): Promise<boolean> {
-  const dir = join(process.cwd(), ".commitdog");
+  const dir = getCommitDogDir();
   const pidFile = join(dir, "server.pid");
 
   if (!existsSync(pidFile)) return false;
 
+  let pid: number;
   try {
-    const pid = parseInt(await readFile(pidFile, "utf-8"), 10);
+    pid = parseInt(await readFile(pidFile, "utf-8"), 10);
+  } catch {
+    try {
+      await unlink(pidFile);
+    } catch {}
+    return false;
+  }
+
+  try {
+    // Check if the process is alive
+    process.kill(pid, 0);
+  } catch (err) {
+    // Process is dead (ESRCH), clean up stale pid file
+    try {
+      await unlink(pidFile);
+    } catch {}
+    return false;
+  }
+
+  // Double-check if the process is actually OpenCode
+  if (!(await isOpencodeProcess(pid))) {
+    // Recycled PID belongs to an unrelated process. Clean up but do not kill.
+    try {
+      await unlink(pidFile);
+    } catch {}
+    return false;
+  }
+
+  try {
     process.kill(pid, "SIGTERM");
     await unlink(pidFile);
     return true;
   } catch {
-    // Process already dead, clean up pid file
-    try {
-      await unlink(pidFile);
-    } catch {
-      /* ignore */
-    }
+    return false;
+  }
+}
+
+async function isOpencodeProcess(pid: number): Promise<boolean> {
+  try {
+    const { stdout } = await execa("ps", ["-p", String(pid), "-o", "command="]);
+    return stdout.toLowerCase().includes("opencode");
+  } catch {
     return false;
   }
 }
