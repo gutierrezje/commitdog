@@ -25,7 +25,8 @@ export function renderMarkdown(report: ReviewReport): string {
       lines.push(finding.title.trim());
       lines.push("");
       if (finding.evidence) {
-        lines.push(`> **Evidence:** \`${finding.evidence.trim()}\``);
+        const escapedEvidence = finding.evidence.replace(/`/g, "\\`").trim();
+        lines.push(`> **Evidence:** \`${escapedEvidence}\``);
         lines.push("");
       }
       lines.push(finding.body.trim());

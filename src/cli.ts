@@ -149,6 +149,12 @@ program
 
       // Filter findings by confidence
       const minConfidence = (options.minConfidence as string | undefined) ?? "medium";
+      const validLevels = ["low", "medium", "high"];
+      if (!validLevels.includes(minConfidence.toLowerCase())) {
+        spinner.stop();
+        console.error(chalk.red(`\nInvalid confidence level: "${minConfidence}". Must be one of: low, medium, high.`));
+        process.exit(1);
+      }
       report.findings = filterFindingsByConfidence(report.findings, minConfidence);
 
       // Filter findings by changed lines (anchoring: only keep if line is in diff hunks, or confidence is high)
