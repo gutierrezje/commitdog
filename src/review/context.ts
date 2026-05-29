@@ -358,8 +358,8 @@ async function findBatchReferences(
   ignoredPaths: Set<string>,
 ): Promise<ReferenceMatch[]> {
   const [gitMatches, rgMatches] = await Promise.all([
-    findBatchReferencesWithGitGrep(terms, ignoredPaths),
-    findBatchReferencesWithRipgrep(terms, ignoredPaths),
+    findBatchReferencesWithGitGrep(terms, ignoredPaths).catch(() => []),
+    findBatchReferencesWithRipgrep(terms, ignoredPaths).catch(() => []),
   ]);
 
   const seen = new Set<string>();
@@ -373,7 +373,7 @@ async function findBatchReferences(
     }
   }
 
-  return combined;
+  return combined.slice(0, 200); // Truly bound memory globally
 }
 
 async function findBatchReferencesWithGitGrep(
