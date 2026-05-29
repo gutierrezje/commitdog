@@ -242,8 +242,23 @@ function generateHookScript(command: HookCommand): string {
 ${generateManagedSection(command)}`;
 }
 
-function generateManagedSection(command: HookCommand): string {
+export function generateManagedSection(command: HookCommand): string {
+  const isPath = command.commitdog.includes("/") || command.commitdog.includes("\\");
   const quotedCommitDog = shellQuote(command.commitdog);
+
+  let runBlock = "";
+  if (isPath) {
+    runBlock = `if [ -x ${quotedCommitDog} ]; then
+  nohup ${quotedCommitDog} review --hook --quick >>"$COMMITDOG_LOG_FILE" 2>&1 </dev/null &
+elif command -v commitdog >/dev/null 2>&1; then
+  nohup commitdog review --hook --quick >>"$COMMITDOG_LOG_FILE" 2>&1 </dev/null &
+fi`;
+  } else {
+    runBlock = `if command -v ${quotedCommitDog} >/dev/null 2>&1; then
+  nohup ${quotedCommitDog} review --hook --quick >>"$COMMITDOG_LOG_FILE" 2>&1 </dev/null &
+fi`;
+  }
+
   return `${HOOK_MARKER}
 # Run commitdog review in the background (non-blocking)
 COMMITDOG_LOG_DIR=".commitdog"
@@ -253,11 +268,7 @@ mkdir -p "$COMMITDOG_LOG_DIR"
 echo "commitdog: review started in background; log: $COMMITDOG_LOG_FILE; latest report: .commitdog/reviews/latest.md"
 echo "commitdog: review started at $(date); latest report: .commitdog/reviews/latest.md" >>"$COMMITDOG_LOG_FILE"
 
-if [ -x ${quotedCommitDog} ]; then
-  nohup ${quotedCommitDog} review --hook --quick >>"$COMMITDOG_LOG_FILE" 2>&1 </dev/null &
-elif command -v commitdog >/dev/null 2>&1; then
-  nohup commitdog review --hook --quick >>"$COMMITDOG_LOG_FILE" 2>&1 </dev/null &
-fi
+${runBlock}
 ${HOOK_END_MARKER}
 `;
 }
