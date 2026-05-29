@@ -26,6 +26,29 @@ describe("colorizeMarkdown", () => {
     expect(output).toContain("this file");
     expect(output).not.toContain("$1");
   });
+
+  it("skips markdown formatting inside triple backtick code blocks", () => {
+    const input = [
+      "Review **this outside** please",
+      "```ts",
+      "const raw = **not bold**",
+      "### In Code Block Header",
+      "```",
+      "More **bold outside** text"
+    ].join("\n");
+
+    const output = colorizeMarkdown(input);
+
+    // Outside code blocks should be colorized/modified (e.g. no asterisks)
+    expect(output).toContain("this outside");
+    expect(output).not.toContain("**this outside**");
+    expect(output).toContain("bold outside");
+    expect(output).not.toContain("**bold outside**");
+
+    // Inside code blocks should be completely untouched
+    expect(output).toContain("const raw = **not bold**");
+    expect(output).toContain("### In Code Block Header");
+  });
 });
 
 describe("renderMarkdown", () => {

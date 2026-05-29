@@ -77,13 +77,6 @@ export function printHeader(): void {
   console.log();
 }
 
-/**
- * Print a chunk of the streaming response
- */
-export function printChunk(text: string): void {
-  // Apply some basic coloring to the streamed markdown
-  process.stdout.write(colorizeMarkdown(text));
-}
 
 /**
  * Print the review footer with summary
@@ -131,13 +124,33 @@ export function printFooter(report: ReviewReport, reportPath?: string): void {
  * Basic markdown colorization for terminal output
  */
 export function colorizeMarkdown(text: string): string {
-  return text
-    .replace(
-      /\*\*\[(ERROR|WARNING|INFO)\]([^*]*)\*\*/g,
-      (_match, label: string, rest: string) => `${colorizeSeverity(label)}${chalk.bold(rest)}`,
-    )
-    .replace(/### (.*)/g, (_match, title: string) => chalk.bold.underline(title))
-    .replace(/\*\*([^*]+)\*\*/g, (_match, content: string) => chalk.bold(content));
+  const lines = text.split("\n");
+  const colorizedLines: string[] = [];
+  let inCodeBlock = false;
+
+  for (const line of lines) {
+    if (line.trim().startsWith("```")) {
+      inCodeBlock = !inCodeBlock;
+      colorizedLines.push(chalk.dim(line));
+      continue;
+    }
+
+    if (inCodeBlock) {
+      colorizedLines.push(line);
+    } else {
+      const colorized = line
+        .replace(
+          /\*\*\[(ERROR|WARNING|INFO)\]([^*]*)\*\*/g,
+          (_match, label: string, rest: string) => `${colorizeSeverity(label)}${chalk.bold(rest)}`,
+        )
+        .replace(/^### (.*)/g, (_match, title: string) => chalk.bold.underline(title))
+        .replace(/\*\*([^*]+)\*\*/g, (_match, content: string) => chalk.bold(content));
+      
+      colorizedLines.push(colorized);
+    }
+  }
+
+  return colorizedLines.join("\n");
 }
 
 function colorizeSeverity(label: string): string {
