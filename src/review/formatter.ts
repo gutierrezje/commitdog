@@ -167,6 +167,6 @@ export function formatMarkdownCodeSpan(text: string): string {
   }
 
   const delimiter = "`".repeat(maxRun + 1);
-  const pad = trimmed.startsWith("`") || trimmed.endsWith("`") || trimmed.startsWith(" ") || trimmed.endsWith(" ") ? " " : "";
+  const pad = trimmed.startsWith("`") || trimmed.endsWith("`") ? " " : "";
   return `${delimiter}${pad}${trimmed}${pad}${delimiter}`;
 }

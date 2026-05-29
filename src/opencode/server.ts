@@ -112,7 +112,7 @@ export async function stopServer(): Promise<boolean> {
   try {
     // Check if the process is alive
     process.kill(pid, 0);
-  } catch (err) {
+  } catch {
     // Process is dead (ESRCH), clean up stale pid file
     try {
       await unlink(pidFile);

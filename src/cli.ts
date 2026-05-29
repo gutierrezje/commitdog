@@ -157,12 +157,12 @@ program
       }
       report.findings = filterFindingsByConfidence(report.findings, minConfidence);
 
-      // Filter findings by changed lines (anchoring: only keep if line is in diff hunks, or confidence is high)
-      const changedLinesMap = new Map<string, number[]>();
+      // Filter findings by changed files (anchoring: only keep if file is modified in this diff, or confidence is high)
+      const changedFilesMap = new Map<string, number[]>();
       for (const file of reviewContext.changedFiles) {
-        changedLinesMap.set(file.file.path, file.changedLines);
+        changedFilesMap.set(file.file.path, file.changedLines);
       }
-      report.findings = filterFindingsByChangedLines(report.findings, changedLinesMap);
+      report.findings = filterFindingsByChangedFiles(report.findings, changedFilesMap);
 
       const renderStart = performance.now();
       const markdown = renderMarkdown(report);
@@ -499,9 +499,9 @@ function filterFindingsByConfidence(findings: ReviewFinding[], minConfidence: st
   });
 }
 
-function filterFindingsByChangedLines(findings: ReviewFinding[], changedLines: Map<string, number[]>): ReviewFinding[] {
+function filterFindingsByChangedFiles(findings: ReviewFinding[], changedFiles: Map<string, number[]>): ReviewFinding[] {
   return findings.filter((f) => {
-    const fileLines = changedLines.get(f.file);
+    const fileLines = changedFiles.get(f.file);
     if (!fileLines) {
       // If the file wasn't changed in this diff at all, it's a hallucinated file.
       // We only keep it if the AI is extremely confident.
