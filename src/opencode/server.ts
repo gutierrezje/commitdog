@@ -59,6 +59,22 @@ export async function ensureServer(port: number): Promise<string> {
   );
 }
 
+async function checkOpencodeInstalled(): Promise<void> {
+  const isWin = process.platform === "win32";
+  const checkCmd = isWin ? "where" : "which";
+  try {
+    await execa(checkCmd, ["opencode"]);
+  } catch {
+    try {
+      await execa("opencode", ["--version"]);
+    } catch {
+      throw new Error(
+        "opencode not found. Install it: npm i -g opencode-ai\nSee: https://opencode.ai/docs/",
+      );
+    }
+  }
+}
+
 /**
  * Spawn opencode serve as a detached background process
  */
@@ -66,14 +82,7 @@ async function spawnServer(port: number): Promise<void> {
   const dir = await ensureCommitDogDir();
   const pidFile = join(dir, "server.pid");
 
-  // Check if opencode is installed
-  try {
-    await execa("which", ["opencode"]);
-  } catch {
-    throw new Error(
-      "opencode not found. Install it: npm i -g opencode-ai\nSee: https://opencode.ai/docs/",
-    );
-  }
+  await checkOpencodeInstalled();
 
   const subprocess = execa("opencode", ["serve", "--port", String(port)], {
     detached: true,
@@ -139,9 +148,39 @@ export async function stopServer(): Promise<boolean> {
 }
 
 async function isOpencodeProcess(pid: number): Promise<boolean> {
+  const isWin = process.platform === "win32";
+
   try {
-    const { stdout } = await execa("ps", ["-p", String(pid), "-o", "command="]);
-    return stdout.toLowerCase().includes("opencode");
+    if (isWin) {
+      // Try using PowerShell to get full CommandLine (most robust)
+      try {
+        const { stdout } = await execa("powershell", [
+          "-NoProfile",
+          "-Command",
+          `Get-CimInstance Win32_Process -Filter 'ProcessId = ${pid}' | Select-Object -ExpandProperty CommandLine`,
+        ]);
+        if (stdout.toLowerCase().includes("opencode")) {
+          return true;
+        }
+      } catch {
+        // Fall back to tasklist if PowerShell query fails
+      }
+
+      // Fallback: use tasklist to check image name
+      const { stdout } = await execa("tasklist", [
+        "/FI",
+        `PID eq ${pid}`,
+        "/FO",
+        "CSV",
+        "/NH",
+      ]);
+      const lower = stdout.toLowerCase();
+      return lower.includes("opencode") || lower.includes("node");
+    } else {
+      // POSIX: Keep ps -p ... (works on Linux/macOS)
+      const { stdout } = await execa("ps", ["-p", String(pid), "-o", "command="]);
+      return stdout.toLowerCase().includes("opencode");
+    }
   } catch {
     return false;
   }

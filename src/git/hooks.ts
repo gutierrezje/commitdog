@@ -202,9 +202,16 @@ async function resolveHookCommand(): Promise<HookCommand> {
 }
 
 async function resolveCommand(command: string): Promise<string> {
+  const isWin = process.platform === "win32";
   try {
-    const { stdout } = await execa("sh", ["-c", `command -v ${command}`]);
-    return stdout.trim() || command;
+    if (isWin) {
+      const { stdout } = await execa("where", [command]);
+      const lines = stdout.trim().split("\r\n").map(l => l.trim()).filter(Boolean);
+      return lines[0] || command;
+    } else {
+      const { stdout } = await execa("which", [command]);
+      return stdout.trim() || command;
+    }
   } catch {
     return command;
   }
