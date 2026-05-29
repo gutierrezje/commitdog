@@ -123,6 +123,8 @@ export async function runReview(options: ReviewOptions): Promise<ReviewReport> {
       }
     };
 
+    let lastCheckedLength = 0;
+
     const acceptAssistantText = (text: string) => {
       // We intentionally do NOT stream partial chunks to stdout.
       // Instead we accumulate the full response and then parse the JSON payload.
@@ -135,11 +137,19 @@ export async function runReview(options: ReviewOptions): Promise<ReviewReport> {
         });
       }
 
-      // Some OpenCode sessions never emit `session.idle` (or it can be missed).
-      // If we already have a complete JSON payload, finish immediately.
-      if (looksLikeCompleteStructuredReview(fullResponse)) {
-        settle("resolve", fullResponse);
-        return true;
+      // Throttle/debounce: Only call looksLikeCompleteStructuredReview if:
+      // - The fullResponse length has increased by more than 500 characters since the last check, OR
+      // - The last character of the trimmed text is '}'.
+      const trimmed = fullResponse.trim();
+      const endsWithBrace = trimmed.endsWith("}");
+      const lengthDelta = fullResponse.length - lastCheckedLength;
+
+      if (lengthDelta > 500 || endsWithBrace) {
+        lastCheckedLength = fullResponse.length;
+        if (looksLikeCompleteStructuredReview(fullResponse)) {
+          settle("resolve", fullResponse);
+          return true;
+        }
       }
 
       return false;
@@ -440,7 +450,7 @@ function previewRawResponse(raw: string): string {
   return compact.length > 500 ? `${compact.slice(0, 500)}...` : compact || "<empty>";
 }
 
-function looksLikeCompleteStructuredReview(text: string): boolean {
+export function looksLikeCompleteStructuredReview(text: string): boolean {
   // Streaming completion detector must stay strict: require the marker.
   // Only the final parser (parseStructuredReview) tolerates marker-less JSON.
   const markerIndex = text.indexOf("FINAL_REVIEW_JSON");
@@ -452,6 +462,20 @@ function looksLikeCompleteStructuredReview(text: string): boolean {
   if (firstBrace === -1 || lastBrace === -1 || lastBrace <= firstBrace) return false;
 
   const jsonText = afterMarker.slice(firstBrace, lastBrace + 1);
+
+  // Cheap pre-checks to avoid melting the CPU with synchronous JSON.parse calls:
+  // 1. The JSON text candidate must end with '}'
+  if (!jsonText.endsWith("}")) return false;
+
+  // 2. Count open and close curly braces; only attempt parse if they match and are non-zero
+  let openCount = 0;
+  let closeCount = 0;
+  for (let i = 0; i < jsonText.length; i++) {
+    if (jsonText[i] === "{") openCount++;
+    else if (jsonText[i] === "}") closeCount++;
+  }
+  if (openCount === 0 || openCount !== closeCount) return false;
+
   try {
     const parsed = JSON.parse(jsonText);
     return (
