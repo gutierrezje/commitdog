@@ -31,43 +31,32 @@ CommitDog is a lightweight CLI that integrates into your Git workflow to provide
 
 ### 2. Install CommitDog
 
-Clone the repository and install dependencies locally, or build the CLI:
+Clone the repository and build/link the CLI globally:
 
 ```bash
-# Clone and build
 git clone https://github.com/jesus/commitdog.git
 cd commitdog
-pnpm install
-pnpm run build
+
+# Using pnpm (recommended)
+pnpm install && pnpm run build && pnpm link --global
+
+# Or using npm
+npm install && npm run build && npm link -g
 ```
 
-Link the package globally:
+### Developing & Dogfooding
+
+When making edits to `src/**`, rebuild to update your globally linked CLI and git hooks:
 
 ```bash
-pnpm link --global
-```
-
-### Developing / dogfooding CommitDog (on this repo)
-
-If you’re working on CommitDog itself, the simplest loop is:
-
-```bash
-# after editing src/**
 pnpm run build
-
-# review your staged changes
 git add -p
 commitdog review --staged
 ```
 
-Notes:
-
-- `pnpm link --global` installs the `commitdog` shim globally, and it runs `dist/cli.js` from this checkout.
-- When you change `src/**`, re-run `pnpm run build` so `dist/` stays in sync (this also keeps the post-commit hook using the newest code).
-
 ### 3. Initialize CommitDog in Your Repository
 
-To set up CommitDog for your project, run:
+To set up CommitDog for your project, navigate to your target git repository and run:
 
 ```bash
 commitdog init
@@ -80,6 +69,9 @@ This will:
 3. Allow you to select a model interactively.
 4. Generate a `.commitdog.yml` configuration file in the project root.
 
+> [!IMPORTANT]
+> **Ensure OpenCode is configured first!** Before running `commitdog init`, make sure you have run the `opencode` CLI/UI at least once to authenticate and connect a provider (like GitHub Copilot, OpenAI, Ollama, etc.) with active models. If no active models are configured in OpenCode, the initialization command will fall back to a default configuration.
+
 ---
 
 ## CLI Reference
@@ -91,6 +83,8 @@ Runs a code review on your repository.
 - **Default**: Reviews the changes in the **last commit**.
 - `--staged`: Reviews currently **staged changes** instead of the last commit.
 - `--hook`: Runs in background, non-blocking mode (used by Git hook).
+- `--quick`: Runs in quick review mode. This disables AI tool-calling, relying entirely on the pre-collected local diff context for a faster review.
+- `--min-confidence <level>`: Minimum confidence level of findings to report (`low`, `medium`, `high`). Defaults to `medium`.
 
 ```bash
 # Review last commit
@@ -98,6 +92,9 @@ commitdog
 
 # Review staged files
 commitdog review --staged
+
+# Review with lower confidence threshold
+commitdog review --min-confidence low
 ```
 
 ### `commitdog model`
@@ -114,7 +111,7 @@ commitdog model github-copilot/claude-sonnet-4.5
 
 ### `commitdog hook install | uninstall`
 
-Installs or removes the post-commit Git hook.
+Installs or removes a managed post-commit Git hook that runs reviews automatically and asynchronously in the background.
 
 ```bash
 # Install non-blocking post-commit review hook
@@ -123,6 +120,8 @@ commitdog hook install
 # Uninstall the hook
 commitdog hook uninstall
 ```
+
+*Runs reviews asynchronously in the background via `nohup` (`--quick` mode enabled), saving execution output to `.commitdog/hook.log` and the latest report to `.commitdog/reviews/latest.md`. It returns control to your terminal instantly (ensuring `git commit` has zero delay) and avoids clobbering any existing post-commit hook scripts.*
 
 ### `commitdog server start | stop | status`
 
@@ -138,41 +137,6 @@ commitdog server start
 # Stop the server
 commitdog server stop
 ```
-
----
-
-## Auto Run After Committing
-
-You can set CommitDog up to run automatically in the background after you commit.
-
-### Option A: Built-in git hook installer (recommended)
-
-```bash
-commitdog hook install
-```
-
-This installs a managed `.git/hooks/post-commit` section that runs `commitdog review --hook` via `nohup` and logs to `.commitdog/hook.log`.
-
-### Option B: Husky
-
-### 1. Install & Initialize Husky
-
-If Husky is not already configured in your project, install it and run the initialization:
-
-```bash
-pnpm add -D husky
-pnpm exec husky init
-```
-
-### 2. Configure the post-commit Hook
-
-Create or edit the `post-commit` hook in your `.husky/` directory to execute CommitDog in background mode:
-
-```bash
-echo "commitdog review --hook &" > .husky/post-commit
-```
-
-_Note: The trailing `&` is required. It forks the `commitdog` process into the background, returning control to your terminal instantly so your `git commit` completes without delay._
 
 ---
 

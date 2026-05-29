@@ -16,7 +16,7 @@ export interface CommitDogConfig {
 }
 
 const DEFAULT_CONFIG: CommitDogConfig = {
-  model: "anthropic/claude-sonnet-4-20250514",
+  model: "github-copilot/claude-sonnet-4.5",
   server: {
     port: 4096,
     auto_start: true,
