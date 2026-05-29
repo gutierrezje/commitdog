@@ -166,7 +166,10 @@ async function isOpencodeProcess(pid: number): Promise<boolean> {
         // Fall back to wmic if PowerShell query fails
       }
 
-      // Try using wmic to get full CommandLine (second-level fallback)
+      // Try using wmic to get full CommandLine (intentionally legacy second-level fallback)
+      // Note: wmic is deprecated since Windows 10 1809 and removed in Windows 11 24H2.
+      // This is kept strictly as a legacy compatibility check for older environments.
+      // If missing on modern Windows, it will throw immediately and fall through to tasklist.
       try {
         const { stdout } = await execa("wmic", [
           "process",
@@ -179,7 +182,7 @@ async function isOpencodeProcess(pid: number): Promise<boolean> {
           return true;
         }
       } catch {
-        // Fall back to tasklist if wmic fails
+        // Fall back to tasklist if wmic fails or is missing
       }
 
       // Fallback: use tasklist to check image name (strictly look for opencode)
