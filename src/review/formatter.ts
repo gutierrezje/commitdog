@@ -25,8 +25,7 @@ export function renderMarkdown(report: ReviewReport): string {
       lines.push(finding.title.trim());
       lines.push("");
       if (finding.evidence) {
-        const escapedEvidence = finding.evidence.replace(/`/g, "\\`").trim();
-        lines.push(`> **Evidence:** \`${escapedEvidence}\``);
+        lines.push(`> **Evidence:** ${formatMarkdownCodeSpan(finding.evidence)}`);
         lines.push("");
       }
       lines.push(finding.body.trim());
@@ -150,4 +149,24 @@ function colorizeSeverity(label: string): string {
     default:
       return chalk.blue.bold(`[${label}]`);
   }
+}
+
+export function formatMarkdownCodeSpan(text: string): string {
+  const trimmed = text.trim();
+  let maxRun = 0;
+  let currentRun = 0;
+  for (const char of trimmed) {
+    if (char === "`") {
+      currentRun++;
+      if (currentRun > maxRun) {
+        maxRun = currentRun;
+      }
+    } else {
+      currentRun = 0;
+    }
+  }
+
+  const delimiter = "`".repeat(maxRun + 1);
+  const pad = trimmed.startsWith("`") || trimmed.endsWith("`") || trimmed.startsWith(" ") || trimmed.endsWith(" ") ? " " : "";
+  return `${delimiter}${pad}${trimmed}${pad}${delimiter}`;
 }

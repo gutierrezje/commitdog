@@ -29,7 +29,7 @@ describe("colorizeMarkdown", () => {
 });
 
 describe("renderMarkdown", () => {
-  it("escapes backticks in findings evidence", () => {
+  it("wraps findings evidence containing backticks in double backticks (CommonMark)", () => {
     const report: ReviewReport = {
       summary: "Test summary",
       findings: [
@@ -46,6 +46,26 @@ describe("renderMarkdown", () => {
     };
 
     const output = renderMarkdown(report);
-    expect(output).toContain("> **Evidence:** `const query = \\`SELECT * FROM users\\`;`");
+    expect(output).toContain("> **Evidence:** ``const query = `SELECT * FROM users`;``");
+  });
+
+  it("adds spaces when wrapping starts/ends with a backtick", () => {
+    const report: ReviewReport = {
+      summary: "Test summary",
+      findings: [
+        {
+          severity: "error",
+          file: "src/cli.ts",
+          line: 45,
+          evidence: "`inline`",
+          title: "SQL concern",
+          body: "This looks risky.",
+          confidence: "high"
+        }
+      ]
+    };
+
+    const output = renderMarkdown(report);
+    expect(output).toContain("> **Evidence:** `` `inline` ``");
   });
 });

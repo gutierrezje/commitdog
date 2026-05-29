@@ -507,10 +507,6 @@ function filterFindingsByChangedLines(findings: ReviewFinding[], changedLines: M
       // We only keep it if the AI is extremely confident.
       return f.confidence === "high";
     }
-    // If the specific line wasn't modified in the diff hunks, discard it unless it's high confidence.
-    if (!fileLines.includes(f.line)) {
-      return f.confidence === "high";
-    }
     return true;
   });
 }
