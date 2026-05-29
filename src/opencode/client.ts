@@ -467,12 +467,30 @@ export function looksLikeCompleteStructuredReview(text: string): boolean {
   // 1. The JSON text candidate must end with '}'
   if (!jsonText.endsWith("}")) return false;
 
-  // 2. Count open and close curly braces; only attempt parse if they match and are non-zero
+  // 2. Count open and close curly braces; only attempt parse if they match and are non-zero.
+  // We track whether we are inside a string literal to ignore mismatched braces inside JSON values (e.g. code evidence).
   let openCount = 0;
   let closeCount = 0;
+  let inString = false;
+  let escapeNext = false;
   for (let i = 0; i < jsonText.length; i++) {
-    if (jsonText[i] === "{") openCount++;
-    else if (jsonText[i] === "}") closeCount++;
+    const char = jsonText[i];
+    if (escapeNext) {
+      escapeNext = false;
+      continue;
+    }
+    if (char === "\\") {
+      escapeNext = true;
+      continue;
+    }
+    if (char === '"') {
+      inString = !inString;
+      continue;
+    }
+    if (!inString) {
+      if (char === "{") openCount++;
+      else if (char === "}") closeCount++;
+    }
   }
   if (openCount === 0 || openCount !== closeCount) return false;
 

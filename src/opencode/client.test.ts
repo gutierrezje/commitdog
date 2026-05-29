@@ -45,4 +45,9 @@ describe("looksLikeCompleteStructuredReview", () => {
     const text = 'FINAL_REVIEW_JSON\n{"summary":"abc","findings":[]}';
     expect(looksLikeCompleteStructuredReview(text)).toBe(true);
   });
+
+  it("ignores mismatched braces inside string values (like evidence)", () => {
+    const text = 'FINAL_REVIEW_JSON\n{"summary":"abc","findings":[],"evidence":"function foo() {"}';
+    expect(looksLikeCompleteStructuredReview(text)).toBe(true);
+  });
 });
