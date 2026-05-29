@@ -501,11 +501,8 @@ function filterFindingsByConfidence(findings: ReviewFinding[], minConfidence: st
 
 function filterFindingsByChangedFiles(findings: ReviewFinding[], changedFiles: Set<string>): ReviewFinding[] {
   return findings.filter((f) => {
-    if (!changedFiles.has(f.file)) {
-      // If the file wasn't changed in this diff at all, it's a hallucinated file.
-      // We only keep it if the AI is extremely confident.
-      return f.confidence === "high";
-    }
-    return true;
+    // If the file wasn't changed in this diff at all, it's a hallucinated file.
+    // Drop it unconditionally, since confidence is not a guarantee of correctness.
+    return changedFiles.has(f.file);
   });
 }
