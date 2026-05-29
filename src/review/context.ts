@@ -4,7 +4,7 @@ import { basename, dirname, extname, join } from "node:path";
 import { execa } from "execa";
 import ts from "typescript";
 import picomatch from "picomatch";
-import { getLastCommitDiff, getStagedDiff, type DiffFile, type DiffResult } from "../git/diff.js";
+import { getLastCommitDiff, getStagedDiff, parseGitDiffLine, type DiffFile, type DiffResult } from "../git/diff.js";
 import type { CommitDogConfig } from "../config.js";
 
 const MAX_DIFF_CHARS = 40_000;
@@ -413,9 +413,9 @@ function filterDiffRaw(rawDiff: string, includedPaths: Set<string>): string {
   let includeCurrentFile = false;
 
   for (const line of rawDiff.split("\n")) {
-    const fileMatch = line.match(/^diff --git a\/(.+) b\/(.+)$/);
-    if (fileMatch) {
-      includeCurrentFile = includedPaths.has(fileMatch[2]!);
+    const gitDiffPaths = parseGitDiffLine(line);
+    if (gitDiffPaths) {
+      includeCurrentFile = includedPaths.has(gitDiffPaths.pathB);
     }
 
     if (includeCurrentFile) {
@@ -619,9 +619,9 @@ function getChangedLinesByFile(rawDiff: string): Map<string, number[]> {
   let newLine: number | undefined;
 
   for (const line of rawDiff.split("\n")) {
-    const fileMatch = line.match(/^diff --git a\/(.+) b\/(.+)$/);
-    if (fileMatch) {
-      currentPath = fileMatch[2];
+    const gitDiffPaths = parseGitDiffLine(line);
+    if (gitDiffPaths) {
+      currentPath = gitDiffPaths.pathB;
       continue;
     }
 

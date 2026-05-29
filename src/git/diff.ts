@@ -14,7 +14,17 @@ export interface DiffFile {
 }
 
 export async function getLastCommitDiff(): Promise<DiffResult> {
-  const { stdout: raw } = await execa("git", ["show", "--format=", "--stat", "--patch", "HEAD"]);
+  const { stdout: raw } = await execa("git", [
+    "-c",
+    "diff.noprefix=false",
+    "-c",
+    "diff.mnemonicprefix=false",
+    "show",
+    "--format=",
+    "--stat",
+    "--patch",
+    "HEAD",
+  ]);
   return parseDiff(raw);
 }
 
@@ -22,7 +32,16 @@ export async function getLastCommitDiff(): Promise<DiffResult> {
  * Get the diff for staged changes
  */
 export async function getStagedDiff(): Promise<DiffResult> {
-  const { stdout: raw } = await execa("git", ["diff", "--staged", "--stat", "--patch"]);
+  const { stdout: raw } = await execa("git", [
+    "-c",
+    "diff.noprefix=false",
+    "-c",
+    "diff.mnemonicprefix=false",
+    "diff",
+    "--staged",
+    "--stat",
+    "--patch",
+  ]);
   return parseDiff(raw);
 }
 
@@ -30,9 +49,15 @@ export async function getStagedDiff(): Promise<DiffResult> {
  * Get the diff summary (just file names and stats) for display purposes
  */
 export async function getDiffSummary(mode: "last" | "staged"): Promise<string> {
-  const args =
+  const subcommandArgs =
     mode === "staged" ? ["diff", "--staged", "--stat"] : ["show", "--format=", "--stat", "HEAD"];
-  const { stdout } = await execa("git", args);
+  const { stdout } = await execa("git", [
+    "-c",
+    "diff.noprefix=false",
+    "-c",
+    "diff.mnemonicprefix=false",
+    ...subcommandArgs,
+  ]);
   return stdout;
 }
 
@@ -142,7 +167,7 @@ export function parseDiff(raw: string): DiffResult {
   return { files, raw, summary };
 }
 
-function parseGitDiffLine(line: string): { pathA: string; pathB: string } | null {
+export function parseGitDiffLine(line: string): { pathA: string; pathB: string } | null {
   if (!line.startsWith("diff --git ")) return null;
   const content = line.slice("diff --git ".length);
 
@@ -189,8 +214,18 @@ function parseGitDiffLine(line: string): { pathA: string; pathB: string } | null
   let pathA = paths[0] ?? "";
   let pathB = paths[1] ?? "";
 
-  if (pathA.startsWith("a/")) pathA = pathA.slice(2);
-  if (pathB.startsWith("b/")) pathB = pathB.slice(2);
+  // Robustly handle prefixes: check if both paths start with a prefix character in [abciow] followed by a slash
+  // and the prefix characters are different (since standard, mnemonic, etc. prefixes differ).
+  const matchA = pathA.match(/^([abciow])\//);
+  const matchB = pathB.match(/^([abciow])\//);
+
+  if (matchA && matchB && matchA[1] !== matchB[1]) {
+    pathA = pathA.slice(2);
+    pathB = pathB.slice(2);
+  } else if (pathA.startsWith("a/") && pathB.startsWith("b/")) {
+    pathA = pathA.slice(2);
+    pathB = pathB.slice(2);
+  }
 
   return { pathA, pathB };
 }

@@ -146,4 +146,62 @@ describe("parseDiff", () => {
     expect(file.path).toBe('src/new_"');
     expect(file.status).toBe("renamed");
   });
+
+  it("handles diff.noprefix=true formats correctly", () => {
+    const rawDiffNoPrefix = [
+      "diff --git src/cli.ts src/cli.ts",
+      "index 1234567..89abcde 100644",
+      "--- src/cli.ts",
+      "+++ src/cli.ts",
+      "@@ -10,1 +10,2 @@",
+      " unchanged",
+      "+added",
+    ].join("\n");
+
+    const result = parseDiff(rawDiffNoPrefix);
+
+    expect(result.files).toHaveLength(1);
+    const file = result.files[0]!;
+    expect(file.path).toBe("src/cli.ts");
+    expect(file.status).toBe("modified");
+    expect(file.additions).toBe(1);
+  });
+
+  it("handles diff.noprefix=true formats with files starting with 'a/' correctly", () => {
+    const rawDiffNoPrefixA = [
+      "diff --git a/foo.ts a/foo.ts",
+      "index 1234567..89abcde 100644",
+      "--- a/foo.ts",
+      "+++ a/foo.ts",
+      "@@ -1,1 +1,2 @@",
+      " unchanged",
+      "+added",
+    ].join("\n");
+
+    const result = parseDiff(rawDiffNoPrefixA);
+
+    expect(result.files).toHaveLength(1);
+    const file = result.files[0]!;
+    expect(file.path).toBe("a/foo.ts"); // Should not strip a/ because both start with a/ (no prefix pair)
+    expect(file.status).toBe("modified");
+  });
+
+  it("handles diff.mnemonicprefix=true formats correctly", () => {
+    const rawDiffMnemonic = [
+      "diff --git i/src/cli.ts w/src/cli.ts",
+      "index 1234567..89abcde 100644",
+      "--- i/src/cli.ts",
+      "+++ w/src/cli.ts",
+      "@@ -1,1 +1,2 @@",
+      " unchanged",
+      "+added",
+    ].join("\n");
+
+    const result = parseDiff(rawDiffMnemonic);
+
+    expect(result.files).toHaveLength(1);
+    const file = result.files[0]!;
+    expect(file.path).toBe("src/cli.ts");
+    expect(file.status).toBe("modified");
+  });
 });
