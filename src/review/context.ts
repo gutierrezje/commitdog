@@ -329,11 +329,22 @@ async function buildReferenceContexts(
     }
   }
 
-  const references: ReferenceContext[] = [];
-  for (const term of [...terms]
+  const validTerms = [...terms]
     .filter((value) => value.length >= 3)
-    .slice(0, MAX_REFERENCE_TERMS)) {
-    const matches = await findReferences(term, ignoredPaths);
+    .slice(0, MAX_REFERENCE_TERMS);
+
+  if (validTerms.length === 0) {
+    return [];
+  }
+
+  const allMatches = await findBatchReferences(validTerms, ignoredPaths);
+
+  const references: ReferenceContext[] = [];
+  for (const term of validTerms) {
+    const matches = allMatches
+      .filter((match) => match.text.includes(term))
+      .slice(0, MAX_REFERENCES_PER_TERM);
+
     if (matches.length > 0) {
       references.push({ term, matches });
     }
@@ -342,67 +353,71 @@ async function buildReferenceContexts(
   return references;
 }
 
-async function findReferences(term: string, changedPaths: Set<string>): Promise<ReferenceMatch[]> {
-  const gitMatches = await findReferencesWithGitGrep(term, changedPaths);
+async function findBatchReferences(
+  terms: string[],
+  ignoredPaths: Set<string>,
+): Promise<ReferenceMatch[]> {
+  const gitMatches = await findBatchReferencesWithGitGrep(terms, ignoredPaths);
   if (gitMatches.length > 0) {
     return gitMatches;
   }
 
-  return findReferencesWithRipgrep(term, changedPaths);
+  return findBatchReferencesWithRipgrep(terms, ignoredPaths);
 }
 
-async function findReferencesWithGitGrep(
-  term: string,
-  changedPaths: Set<string>,
+async function findBatchReferencesWithGitGrep(
+  terms: string[],
+  ignoredPaths: Set<string>,
 ): Promise<ReferenceMatch[]> {
   try {
-    const { stdout } = await execa("git", ["grep", "-n", "--fixed-strings", "--", term], {
-      timeout: 1500,
-    });
+    const args = ["grep", "-n", "--fixed-strings"];
+    for (const term of terms) {
+      args.push("-e", term);
+    }
+    args.push("--");
 
-    return parseReferenceLines(stdout, changedPaths);
+    const { stdout } = await execa("git", args, { timeout: 2000 });
+    return parseBatchReferenceLines(stdout, ignoredPaths);
   } catch {
     return [];
   }
 }
 
-async function findReferencesWithRipgrep(
-  term: string,
-  changedPaths: Set<string>,
+async function findBatchReferencesWithRipgrep(
+  terms: string[],
+  ignoredPaths: Set<string>,
 ): Promise<ReferenceMatch[]> {
   try {
-    const { stdout } = await execa(
-      "rg",
-      [
-        "--line-number",
-        "--fixed-strings",
-        "--glob",
-        "!node_modules/**",
-        "--glob",
-        "!dist/**",
-        "--glob",
-        "!.git/**",
-        "--glob",
-        "!*lock*",
-        term,
-      ],
-      { timeout: 1500 },
-    );
+    const args = [
+      "--line-number",
+      "--fixed-strings",
+      "--glob",
+      "!node_modules/**",
+      "--glob",
+      "!dist/**",
+      "--glob",
+      "!.git/**",
+      "--glob",
+      "!*lock*",
+    ];
+    for (const term of terms) {
+      args.push("-e", term);
+    }
 
-    return parseReferenceLines(stdout, changedPaths);
+    const { stdout } = await execa("rg", args, { timeout: 2000 });
+    return parseBatchReferenceLines(stdout, ignoredPaths);
   } catch {
     return [];
   }
 }
 
-function parseReferenceLines(stdout: string, changedPaths: Set<string>): ReferenceMatch[] {
+function parseBatchReferenceLines(stdout: string, ignoredPaths: Set<string>): ReferenceMatch[] {
   return stdout
     .split("\n")
     .filter(Boolean)
     .map(parseReferenceLine)
     .filter((match): match is ReferenceMatch => Boolean(match))
-    .filter((match) => !changedPaths.has(match.path))
-    .slice(0, MAX_REFERENCES_PER_TERM);
+    .filter((match) => !ignoredPaths.has(match.path));
 }
 
 function parseReferenceLine(line: string): ReferenceMatch | undefined {
