@@ -40,6 +40,7 @@ const MAX_QUICK_FILE_CHARS = 4_000;
 const MAX_REFERENCES_PER_TERM = 8;
 const MAX_REFERENCE_TERMS = 8;
 const MAX_REFERENCE_LINE_CHARS = 220;
+const MAX_BATCH_REFERENCE_MATCHES = 200;
 const LOCKFILE_EXCLUDES = ["package-lock.json", "pnpm-lock.yaml", "yarn.lock", "bun.lockb"];
 
 export interface ReviewContext {
@@ -49,6 +50,7 @@ export interface ReviewContext {
   skippedFiles: DiffFile[];
   relatedFiles: RelatedFileContext[];
   references: ReferenceContext[];
+  diagnostics: string[];
 }
 
 export interface ChangedFileContext {
@@ -105,7 +107,8 @@ export async function buildReviewContext(
     reviewableFiles.map((file) => buildChangedFileContext(file, changedLines.get(file.path) ?? [])),
   );
   const relatedFiles = await buildRelatedFileContexts(reviewableFiles);
-  const references = await buildReferenceContexts(changedFiles, skippedFiles);
+  const diagnostics: string[] = [];
+  const references = await buildReferenceContexts(changedFiles, skippedFiles, diagnostics);
 
   return {
     mode,
@@ -114,6 +117,7 @@ export async function buildReviewContext(
     skippedFiles,
     relatedFiles,
     references,
+    diagnostics,
   };
 }
 
@@ -137,6 +141,11 @@ export function renderReviewContext(
     lines.push("");
     lines.push("Skipped by include/exclude rules:");
     lines.push(context.skippedFiles.map((file) => `- ${file.path}`).join("\n"));
+  }
+  if (context.diagnostics.length > 0) {
+    lines.push("");
+    lines.push("Context diagnostics:");
+    lines.push(context.diagnostics.map((diagnostic) => `- ${diagnostic}`).join("\n"));
   }
   lines.push("");
   lines.push("### Diff");
@@ -315,6 +324,7 @@ async function buildRelatedFileContexts(files: DiffFile[]): Promise<RelatedFileC
 async function buildReferenceContexts(
   changedFiles: ChangedFileContext[],
   skippedFiles: DiffFile[],
+  diagnostics: string[],
 ): Promise<ReferenceContext[]> {
   const terms = new Set<string>();
   const ignoredPaths = new Set([
@@ -337,7 +347,7 @@ async function buildReferenceContexts(
     return [];
   }
 
-  const allMatches = await findBatchReferences(validTerms, ignoredPaths);
+  const allMatches = await findBatchReferences(validTerms, ignoredPaths, diagnostics);
 
   const references: ReferenceContext[] = [];
   for (const term of validTerms) {
@@ -356,10 +366,19 @@ async function buildReferenceContexts(
 async function findBatchReferences(
   terms: string[],
   ignoredPaths: Set<string>,
+  diagnostics: string[],
 ): Promise<ReferenceMatch[]> {
   const [gitMatches, rgMatches] = await Promise.all([
-    findBatchReferencesWithGitGrep(terms, ignoredPaths).catch(() => []),
-    findBatchReferencesWithRipgrep(terms, ignoredPaths).catch(() => []),
+    findBatchReferencesWithDiagnostics(
+      "git grep",
+      () => findBatchReferencesWithGitGrep(terms, ignoredPaths),
+      diagnostics,
+    ),
+    findBatchReferencesWithDiagnostics(
+      "ripgrep",
+      () => findBatchReferencesWithRipgrep(terms, ignoredPaths),
+      diagnostics,
+    ),
   ]);
 
   const seen = new Set<string>();
@@ -373,7 +392,31 @@ async function findBatchReferences(
     }
   }
 
-  return combined.slice(0, 200); // Truly bound memory globally
+  if (combined.length > MAX_BATCH_REFERENCE_MATCHES) {
+    diagnostics.push(
+      `Reference search found ${combined.length} matches; only the first ${MAX_BATCH_REFERENCE_MATCHES} are included.`,
+    );
+  }
+
+  return combined.slice(0, MAX_BATCH_REFERENCE_MATCHES);
+}
+
+async function findBatchReferencesWithDiagnostics(
+  label: string,
+  search: () => Promise<ReferenceMatch[]>,
+  diagnostics: string[],
+): Promise<ReferenceMatch[]> {
+  try {
+    return await search();
+  } catch (err) {
+    diagnostics.push(`Reference search with ${label} failed: ${formatReferenceSearchError(err)}.`);
+    return [];
+  }
+}
+
+function formatReferenceSearchError(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  return String(err);
 }
 
 async function findBatchReferencesWithGitGrep(
@@ -389,9 +432,14 @@ async function findBatchReferencesWithGitGrep(
 
     const { stdout } = await execa("git", args, { timeout: 2000 });
     return parseBatchReferenceLines(stdout, ignoredPaths);
-  } catch {
-    return [];
+  } catch (err) {
+    if (isNoMatchesExit(err)) return [];
+    throw err;
   }
+}
+
+function isNoMatchesExit(err: unknown): boolean {
+  return typeof err === "object" && err !== null && "exitCode" in err && err.exitCode === 1;
 }
 
 async function findBatchReferencesWithRipgrep(
@@ -417,8 +465,9 @@ async function findBatchReferencesWithRipgrep(
 
     const { stdout } = await execa("rg", args, { timeout: 2000 });
     return parseBatchReferenceLines(stdout, ignoredPaths);
-  } catch {
-    return [];
+  } catch (err) {
+    if (isNoMatchesExit(err)) return [];
+    throw err;
   }
 }
 
@@ -429,7 +478,7 @@ function parseBatchReferenceLines(stdout: string, ignoredPaths: Set<string>): Re
     .map(parseReferenceLine)
     .filter((match): match is ReferenceMatch => Boolean(match))
     .filter((match) => !ignoredPaths.has(match.path))
-    .slice(0, 200); // Bound memory and parsing overhead globally
+    .slice(0, MAX_BATCH_REFERENCE_MATCHES); // Bound memory and parsing overhead per search tool
 }
 
 function parseReferenceLine(line: string): ReferenceMatch | undefined {

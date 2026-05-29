@@ -126,6 +126,15 @@ program
       const localContext = renderReviewContext(reviewContext, { quick: Boolean(options.quick) });
       recordCliTiming(timings, "context-render", "Local review context render", contextRenderStart);
 
+      if (reviewContext.diagnostics.length > 0) {
+        spinner.warn("Local review context built with warnings.");
+        for (const diagnostic of reviewContext.diagnostics) {
+          console.log(chalk.yellow(`  - ${diagnostic}`));
+        }
+        console.log();
+        spinner.start("Connecting to OpenCode...");
+      }
+
       // Ensure server and start review
       spinner.text = "Connecting to OpenCode...";
       const serverStart = performance.now();
