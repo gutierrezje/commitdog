@@ -66,7 +66,7 @@ async function checkOpencodeInstalled(): Promise<void> {
     await execa(checkCmd, ["opencode"]);
   } catch {
     try {
-      await execa("opencode", ["--version"]);
+      await execa("opencode", ["--version"], { timeout: 5000 });
     } catch {
       throw new Error(
         "opencode not found. Install it: npm i -g opencode-ai\nSee: https://opencode.ai/docs/",
@@ -163,10 +163,26 @@ async function isOpencodeProcess(pid: number): Promise<boolean> {
           return true;
         }
       } catch {
-        // Fall back to tasklist if PowerShell query fails
+        // Fall back to wmic if PowerShell query fails
       }
 
-      // Fallback: use tasklist to check image name
+      // Try using wmic to get full CommandLine (second-level fallback)
+      try {
+        const { stdout } = await execa("wmic", [
+          "process",
+          "where",
+          `ProcessId=${pid}`,
+          "get",
+          "CommandLine",
+        ]);
+        if (stdout.toLowerCase().includes("opencode")) {
+          return true;
+        }
+      } catch {
+        // Fall back to tasklist if wmic fails
+      }
+
+      // Fallback: use tasklist to check image name (strictly look for opencode)
       const { stdout } = await execa("tasklist", [
         "/FI",
         `PID eq ${pid}`,
@@ -174,8 +190,7 @@ async function isOpencodeProcess(pid: number): Promise<boolean> {
         "CSV",
         "/NH",
       ]);
-      const lower = stdout.toLowerCase();
-      return lower.includes("opencode") || lower.includes("node");
+      return stdout.toLowerCase().includes("opencode");
     } else {
       // POSIX: Keep ps -p ... (works on Linux/macOS)
       const { stdout } = await execa("ps", ["-p", String(pid), "-o", "command="]);
