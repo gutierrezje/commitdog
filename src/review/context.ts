@@ -1,11 +1,34 @@
 import { existsSync } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
 import { basename, dirname, extname, join } from "node:path";
+import { createRequire } from "node:module";
+import { pathToFileURL } from "node:url";
 import { execa } from "execa";
-import ts from "typescript";
 import picomatch from "picomatch";
+import type tsType from "typescript";
 import { getLastCommitDiff, getStagedDiff, parseGitDiffLine, type DiffFile, type DiffResult } from "../git/diff.js";
 import type { CommitDogConfig } from "../config.js";
+
+type tsNode = tsType.Node;
+type tsIdentifier = tsType.Identifier;
+
+let cachedTs: any = null;
+
+function tryLoadUserTypescript(): any {
+  if (cachedTs !== null) return cachedTs;
+  try {
+    const require = createRequire(pathToFileURL(join(process.cwd(), "package.json")));
+    cachedTs = require("typescript");
+  } catch {
+    try {
+      const fallbackRequire = createRequire(import.meta.url);
+      cachedTs = fallbackRequire("typescript");
+    } catch {
+      cachedTs = undefined;
+    }
+  }
+  return cachedTs;
+}
 
 const MAX_DIFF_CHARS = 40_000;
 const MAX_FILE_CHARS = 12_000;
@@ -485,12 +508,17 @@ function extractAstSymbols(
     return [];
   }
 
-  const sourceFile = ts.createSourceFile(path, content, ts.ScriptTarget.Latest, true);
+  const activeTs = tryLoadUserTypescript();
+  if (!activeTs) {
+    return [];
+  }
+
+  const sourceFile = activeTs.createSourceFile(path, content, activeTs.ScriptTarget.Latest, true);
   const changed = new Set(changedLines);
   const symbols: AstSymbolContext[] = [];
 
-  const visit = (node: ts.Node) => {
-    const namedNode = getNamedDeclarationNode(node);
+  const visit = (node: tsNode) => {
+    const namedNode = getNamedDeclarationNode(activeTs, node);
     if (namedNode) {
       const startLine =
         sourceFile.getLineAndCharacterOfPosition(namedNode.getStart(sourceFile)).line + 1;
@@ -498,8 +526,8 @@ function extractAstSymbols(
       if (containsChangedLine(changed, startLine, endLine)) {
         const text = truncateText(namedNode.getText(sourceFile), MAX_AST_SYMBOL_CHARS);
         symbols.push({
-          name: getDeclarationName(namedNode),
-          kind: getDeclarationKind(namedNode),
+          name: getDeclarationName(activeTs, namedNode),
+          kind: getDeclarationKind(activeTs, namedNode),
           startLine,
           endLine,
           text: text.text,
@@ -508,14 +536,14 @@ function extractAstSymbols(
       }
     }
 
-    ts.forEachChild(node, visit);
+    activeTs.forEachChild(node, visit);
   };
 
   visit(sourceFile);
   return dedupeAstSymbols(symbols);
 }
 
-function getNamedDeclarationNode(node: ts.Node): ts.Node | undefined {
+function getNamedDeclarationNode(ts: typeof tsType, node: tsNode): tsNode | undefined {
   if (
     ts.isFunctionDeclaration(node) ||
     ts.isClassDeclaration(node) ||
@@ -525,7 +553,7 @@ function getNamedDeclarationNode(node: ts.Node): ts.Node | undefined {
     ts.isMethodDeclaration(node) ||
     ts.isPropertyDeclaration(node)
   ) {
-    return hasIdentifierName(node) ? node : undefined;
+    return hasIdentifierName(ts, node) ? node : undefined;
   }
 
   if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name)) {
@@ -535,14 +563,14 @@ function getNamedDeclarationNode(node: ts.Node): ts.Node | undefined {
   return undefined;
 }
 
-function hasIdentifierName(node: ts.Node): node is ts.Node & { name: ts.Identifier } {
-  const name = (node as { name?: ts.Node }).name;
+function hasIdentifierName(ts: typeof tsType, node: tsNode): node is tsNode & { name: tsIdentifier } {
+  const name = (node as { name?: tsNode }).name;
   return Boolean(name && ts.isIdentifier(name));
 }
 
-function findAncestor<T extends ts.Node>(
-  node: ts.Node,
-  predicate: (node: ts.Node) => node is T,
+function findAncestor<T extends tsNode>(
+  node: tsNode,
+  predicate: (node: tsNode) => node is T,
 ): T | undefined {
   let current = node.parent;
   while (current) {
@@ -552,21 +580,21 @@ function findAncestor<T extends ts.Node>(
   return undefined;
 }
 
-function getDeclarationName(node: ts.Node): string {
+function getDeclarationName(ts: typeof tsType, node: tsNode): string {
   if (ts.isVariableStatement(node)) {
     return node.declarationList.declarations
-      .map((declaration) => declaration.name.getText())
+      .map((declaration: any) => declaration.name.getText())
       .join(", ");
   }
 
-  if (hasIdentifierName(node)) {
+  if (hasIdentifierName(ts, node)) {
     return node.name.text;
   }
 
   return "<anonymous>";
 }
 
-function getDeclarationKind(node: ts.Node): string {
+function getDeclarationKind(ts: typeof tsType, node: tsNode): string {
   if (ts.isFunctionDeclaration(node)) return "function";
   if (ts.isClassDeclaration(node)) return "class";
   if (ts.isInterfaceDeclaration(node)) return "interface";

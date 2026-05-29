@@ -10,6 +10,7 @@ CommitDog is a lightweight CLI that integrates into your Git workflow to provide
 ## Features
 
 - **Powered by OpenCode**: Integrates seamlessly with OpenCode's local environment, supporting 75+ AI models, tool use, and codebase indexing.
+- **First-Class TypeScript Support**: Automatically extracts modified TypeScript AST nodes (functions, classes, interfaces) to feed rich, structured context to the AI reviewer. To keep installation lightweight, the compiler is dynamically loaded from your project workspace at runtime, saving ~50MB of base package bloat.
 - **Non-Blocking Git Hooks**: Runs asynchronously in the background. It will never slow down or block your `git commit` or `git push` operations.
 - **Intelligent File Filtering**: Supports `include` and `exclude` glob patterns to focus reviews on source directories while skipping build artifacts, lockfiles, and node modules.
 - **Project-Specific Rules**: Inject custom guidelines directly into the reviewer's system prompt (e.g., "Check for SQL injection", "Ensure TypeScript types are explicit").
