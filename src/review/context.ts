@@ -357,12 +357,23 @@ async function findBatchReferences(
   terms: string[],
   ignoredPaths: Set<string>,
 ): Promise<ReferenceMatch[]> {
-  const gitMatches = await findBatchReferencesWithGitGrep(terms, ignoredPaths);
-  if (gitMatches.length > 0) {
-    return gitMatches;
+  const [gitMatches, rgMatches] = await Promise.all([
+    findBatchReferencesWithGitGrep(terms, ignoredPaths),
+    findBatchReferencesWithRipgrep(terms, ignoredPaths),
+  ]);
+
+  const seen = new Set<string>();
+  const combined: ReferenceMatch[] = [];
+
+  for (const match of [...gitMatches, ...rgMatches]) {
+    const key = `${match.path}:${match.line}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      combined.push(match);
+    }
   }
 
-  return findBatchReferencesWithRipgrep(terms, ignoredPaths);
+  return combined;
 }
 
 async function findBatchReferencesWithGitGrep(
@@ -417,7 +428,8 @@ function parseBatchReferenceLines(stdout: string, ignoredPaths: Set<string>): Re
     .filter(Boolean)
     .map(parseReferenceLine)
     .filter((match): match is ReferenceMatch => Boolean(match))
-    .filter((match) => !ignoredPaths.has(match.path));
+    .filter((match) => !ignoredPaths.has(match.path))
+    .slice(0, 200); // Bound memory and parsing overhead globally
 }
 
 function parseReferenceLine(line: string): ReferenceMatch | undefined {
