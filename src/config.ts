@@ -19,7 +19,7 @@ export interface CommitDogConfig {
 }
 
 const DEFAULT_CONFIG: CommitDogConfig = {
-  model: "github-copilot/claude-sonnet-4.5",
+  model: "opencode-go/big-pickle",
   server: {
     port: 4096,
     auto_start: true,

@@ -132,7 +132,7 @@ describe("buildReviewContext", () => {
     await execa("git", ["add", "src/example.ts"]);
 
     const originalPath = process.env["PATH"];
-    process.env["PATH"] = await makeGitOnlyPath(root);
+    process.env["PATH"] = await makeReferenceSearchPath(root);
     try {
       const context = await buildReviewContext("staged", config);
       const rendered = renderReviewContext(context);
@@ -232,17 +232,21 @@ describe("buildReviewContext", () => {
   });
 });
 
-async function makeGitOnlyPath(root: string): Promise<string> {
+async function makeReferenceSearchPath(root: string): Promise<string> {
   const gitPath = await resolveCommandPath("git");
   const binDir = join(root, "test-bin");
   await mkdir(binDir);
 
   if (process.platform === "win32") {
     await writeFile(join(binDir, "git.cmd"), `@"${gitPath}" %*\r\n`, "utf-8");
+    await writeFile(join(binDir, "rg.cmd"), "@echo ripgrep forced failure 1>&2\r\n@exit /b 2\r\n", "utf-8");
   } else {
-    const shim = join(binDir, "git");
-    await writeFile(shim, `#!/bin/sh\nexec '${gitPath.replaceAll("'", "'\\''")}' "$@"\n`, "utf-8");
-    await chmod(shim, 0o755);
+    const gitShim = join(binDir, "git");
+    const rgShim = join(binDir, "rg");
+    await writeFile(gitShim, `#!/bin/sh\nexec '${gitPath.replaceAll("'", "'\\''")}' "$@"\n`, "utf-8");
+    await writeFile(rgShim, "#!/bin/sh\necho ripgrep forced failure >&2\nexit 2\n", "utf-8");
+    await chmod(gitShim, 0o755);
+    await chmod(rgShim, 0o755);
   }
 
   return binDir;

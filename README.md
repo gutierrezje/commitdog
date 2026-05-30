@@ -103,7 +103,7 @@ View or interactively change the active AI model.
 commitdog model
 
 # Manually set a model
-commitdog model github-copilot/claude-sonnet-4.5
+commitdog model opencode-go/big-pickle
 ```
 
 ### `commitdog hook install | uninstall`
@@ -143,7 +143,7 @@ Your `.commitdog.yml` configures everything for CommitDog in your project:
 
 ```yaml
 # Model to use for reviews (provider/model)
-model: github-copilot/claude-sonnet-4.5
+model: opencode-go/big-pickle
 
 # OpenCode server settings
 server:

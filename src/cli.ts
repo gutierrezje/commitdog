@@ -323,7 +323,7 @@ async function runInit() {
 program
   .command("model")
   .description("View or change the AI model")
-  .argument("[model]", "Model to use (e.g., github-copilot/claude-sonnet-4.5)")
+  .argument("[model]", "Model to use (e.g., opencode-go/big-pickle)")
   .action(async (model?: string) => {
     const config = await loadConfigOrExit();
 
@@ -377,7 +377,7 @@ program
         }
       } else {
         console.log(chalk.dim("\nTo change manually: commitdog model <provider/model>"));
-        console.log(chalk.dim("Example: commitdog model github-copilot/claude-sonnet-4.5"));
+        console.log(chalk.dim("Example: commitdog model opencode-go/big-pickle"));
       }
       return;
     }

@@ -1,4 +1,4 @@
-model: opencode-go/kimi-k2.6
+model: opencode-go/big-pickle
 server:
   port: 4096
   auto_start: true
