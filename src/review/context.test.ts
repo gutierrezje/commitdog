@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile, mkdir } from "node:fs/promises";
+import { chmod, mkdtemp, rm, writeFile, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execa } from "execa";
@@ -132,7 +132,7 @@ describe("buildReviewContext", () => {
     await execa("git", ["add", "src/example.ts"]);
 
     const originalPath = process.env["PATH"];
-    process.env["PATH"] = "/usr/bin:/bin";
+    process.env["PATH"] = await makeGitOnlyPath(root);
     try {
       const context = await buildReviewContext("staged", config);
       const rendered = renderReviewContext(context);
@@ -231,3 +231,28 @@ describe("buildReviewContext", () => {
     expect(rendered).not.toContain("Reference Hints");
   });
 });
+
+async function makeGitOnlyPath(root: string): Promise<string> {
+  const gitPath = await resolveCommandPath("git");
+  const binDir = join(root, "test-bin");
+  await mkdir(binDir);
+
+  if (process.platform === "win32") {
+    await writeFile(join(binDir, "git.cmd"), `@"${gitPath}" %*\r\n`, "utf-8");
+  } else {
+    const shim = join(binDir, "git");
+    await writeFile(shim, `#!/bin/sh\nexec '${gitPath.replaceAll("'", "'\\''")}' "$@"\n`, "utf-8");
+    await chmod(shim, 0o755);
+  }
+
+  return binDir;
+}
+
+async function resolveCommandPath(command: string): Promise<string> {
+  const executable = process.platform === "win32" ? "where" : "which";
+  const { stdout } = await execa(executable, [command]);
+  return stdout
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)[0]!;
+}
