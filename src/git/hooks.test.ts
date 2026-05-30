@@ -60,4 +60,26 @@ describe("generateManagedSection", () => {
     expect(section).toContain("[ -x '/usr/local/bin/commitdog' ]");
     expect(section).toContain("command -v commitdog");
   });
+
+  it("does not report a started review when no commitdog command can run", async () => {
+    const root = await mkdtemp(join(tmpdir(), "commitdog-hooks-"));
+    tempDirs.push(root);
+    const scriptPath = join(root, "post-commit");
+    await writeFile(
+      scriptPath,
+      ["#!/bin/sh", generateManagedSection({ commitdog: "/missing/commitdog" })].join("\n"),
+      "utf-8",
+    );
+
+    const { stdout } = await execa("sh", [scriptPath], {
+      cwd: root,
+      env: { PATH: "/usr/bin:/bin" },
+    });
+    const log = await readFile(join(root, ".commitdog", "hook.log"), "utf-8");
+
+    expect(stdout).toContain("commitdog: review not started");
+    expect(stdout).not.toContain("commitdog: review started in background");
+    expect(log).toContain("commitdog: review not started");
+    expect(log).not.toContain("commitdog: review started at");
+  });
 });

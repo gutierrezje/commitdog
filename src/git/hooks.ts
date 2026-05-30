@@ -249,13 +249,25 @@ export function generateManagedSection(command: HookCommand): string {
   let runBlock = "";
   if (isPath) {
     runBlock = `if [ -x ${quotedCommitDog} ]; then
+  echo "commitdog: review started in background; log: $COMMITDOG_LOG_FILE; latest report: .commitdog/reviews/latest.md"
+  echo "commitdog: review started at $(date); latest report: .commitdog/reviews/latest.md" >>"$COMMITDOG_LOG_FILE"
   nohup ${quotedCommitDog} review --hook --quick >>"$COMMITDOG_LOG_FILE" 2>&1 </dev/null &
 elif command -v commitdog >/dev/null 2>&1; then
+  echo "commitdog: review started in background; log: $COMMITDOG_LOG_FILE; latest report: .commitdog/reviews/latest.md"
+  echo "commitdog: review started at $(date); latest report: .commitdog/reviews/latest.md" >>"$COMMITDOG_LOG_FILE"
   nohup commitdog review --hook --quick >>"$COMMITDOG_LOG_FILE" 2>&1 </dev/null &
+else
+  echo "commitdog: review not started; commitdog command not found or not executable; log: $COMMITDOG_LOG_FILE"
+  echo "commitdog: review not started at $(date); commitdog command not found or not executable" >>"$COMMITDOG_LOG_FILE"
 fi`;
   } else {
     runBlock = `if command -v ${quotedCommitDog} >/dev/null 2>&1; then
+  echo "commitdog: review started in background; log: $COMMITDOG_LOG_FILE; latest report: .commitdog/reviews/latest.md"
+  echo "commitdog: review started at $(date); latest report: .commitdog/reviews/latest.md" >>"$COMMITDOG_LOG_FILE"
   nohup ${quotedCommitDog} review --hook --quick >>"$COMMITDOG_LOG_FILE" 2>&1 </dev/null &
+else
+  echo "commitdog: review not started; commitdog command not found or not executable; log: $COMMITDOG_LOG_FILE"
+  echo "commitdog: review not started at $(date); commitdog command not found or not executable" >>"$COMMITDOG_LOG_FILE"
 fi`;
   }
 
@@ -264,9 +276,6 @@ fi`;
 COMMITDOG_LOG_DIR=".commitdog"
 COMMITDOG_LOG_FILE="$COMMITDOG_LOG_DIR/hook.log"
 mkdir -p "$COMMITDOG_LOG_DIR"
-
-echo "commitdog: review started in background; log: $COMMITDOG_LOG_FILE; latest report: .commitdog/reviews/latest.md"
-echo "commitdog: review started at $(date); latest report: .commitdog/reviews/latest.md" >>"$COMMITDOG_LOG_FILE"
 
 ${runBlock}
 ${HOOK_END_MARKER}
