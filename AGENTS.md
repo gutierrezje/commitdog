@@ -1,20 +1,20 @@
-# CommitDog
+# DiffOwl
 
 Local AI code review CLI. Orchestrates headless OpenCode server, delegates repo analysis to local agent.
 
 ## Architecture
 
 - `src/cli.ts` — Commander entry point. All commands defined inline.
-- `src/config.ts` — `.commitdog.yml` load/save. Searches upward from cwd. Deep-merges with defaults.
+- `src/config.ts` — `.diffowl.yml` load/save. Searches upward from cwd. Deep-merges with defaults.
 - `src/opencode/` — OpenCode SDK integration
   - `client.ts` — `runReview()`, `getAvailableModels()`. SSE streaming, session lifecycle.
-  - `server.ts` — Process spawn / health check / stop. Detached, PID tracked in `.commitdog/server.pid`.
+  - `server.ts` — Process spawn / health check / stop. Detached, PID tracked in `.diffowl/server.pid`.
   - `agent.ts` — System prompt (`REVIEW_AGENT_PROMPT`) + `buildReviewPrompt()`.
 - `src/git/` — Git operations
   - `diff.ts` — `git diff/show` parsing into `DiffResult`. Hand-rolled line parser.
   - `hooks.ts` — Post-commit hook install/uninstall. Generates shell script with managed section markers.
 - `src/review/` — Output formatting
-  - `formatter.ts` — Markdown colorization, report write to `.commitdog/reviews/`, `latest.md`.
+  - `formatter.ts` — Markdown colorization, report write to `.diffowl/reviews/`, `latest.md`.
 
 ## Tech Stack
 
@@ -40,7 +40,7 @@ Local AI code review CLI. Orchestrates headless OpenCode server, delegates repo 
 - `REVIEW_AGENT_PROMPT` is a large markdown template. Preserve exact heading structure and severity labels — the formatter regex depends on them.
 - `parseDiff` is regex-based and brittle. Test against real `git diff` output when touching.
 - `runReview` SSE event loop has a 5-min safety timeout and complex `settled` flag logic. Race conditions easy to introduce.
-- `spawnServer` writes PID to `.commitdog/server.pid`; `stopServer` reads it. PID reuse edge case unhandled.
+- `spawnServer` writes PID to `.diffowl/server.pid`; `stopServer` reads it. PID reuse edge case unhandled.
 - Hook script uses `shellQuote` with single-quote escaping. Never inject unsanitized paths.
 - `buildReviewPrompt` concatenates user-supplied `rules` and glob patterns directly into prompt. No sanitization — assume trusted config.
 
@@ -49,23 +49,23 @@ Local AI code review CLI. Orchestrates headless OpenCode server, delegates repo 
 - **One-time setup**:
   - `pnpm install`
   - `pnpm run build`
-  - `pnpm link --global` (installs the `commitdog` binary on your PATH)
-  - `commitdog init` (creates `.commitdog.yml` and selects a model)
+  - `pnpm link --global` (installs the `diffowl` binary on your PATH)
+  - `diffowl init` (creates `.diffowl.yml` and selects a model)
 
 - **Review staged changes (recommended loop)**:
   - Stage your work: `git add -p` (or `git add .`)
-  - Run: `commitdog review --staged`
-  - Read: `.commitdog/reviews/latest.md`
+  - Run: `diffowl review --staged`
+  - Read: `.diffowl/reviews/latest.md`
   - Verify static type safety: `pnpm run lint` (runs oxlint and `tsc --noEmit`)
   - Iterate until clean, then commit: `git commit -m "..."` (or your preferred flow)
 
 - **Review last commit**:
-  - `commitdog review`
+  - `diffowl review`
 
 - **Dogfood hook mode** (non-blocking post-commit review):
-  - Install: `commitdog hook install`
-  - Make a commit as usual; the hook should run `commitdog review --hook` and write `.commitdog/reviews/latest.md`
+  - Install: `diffowl hook install`
+  - Make a commit as usual; the hook should run `diffowl review --hook` and write `.diffowl/reviews/latest.md`
 
-- **Keeping the hook on the latest code while developing CommitDog**:
+- **Keeping the hook on the latest code while developing DiffOwl**:
   - After changing `src/**`, re-run `pnpm run build` so `dist/cli.js` is up to date.
-  - If you’re using `pnpm link --global`, the `commitdog` shim will pick up the updated `dist/cli.js` after rebuilding.
+  - If you’re using `pnpm link --global`, the `diffowl` shim will pick up the updated `dist/cli.js` after rebuilding.

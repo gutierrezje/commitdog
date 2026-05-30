@@ -20,7 +20,7 @@ async function getHooksDir(): Promise<string> {
 }
 
 /**
- * Install the post-commit hook. Runs commitdog in the background (non-blocking).
+ * Install the post-commit hook. Runs diffowl in the background (non-blocking).
  */
 export async function installHook(): Promise<string> {
   const hooksDir = await getHooksDir();

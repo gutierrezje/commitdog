@@ -35,7 +35,7 @@ DiffOwl is a lightweight CLI that integrates into your Git workflow to provide h
 Clone the repository and build/link the CLI globally:
 
 ```bash
-git clone https://github.com/jesus/commitdog.git diffowl
+git clone https://github.com/gutierrezje/diffowl.git
 cd diffowl
 
 # Using pnpm (recommended)
