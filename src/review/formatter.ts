@@ -33,9 +33,6 @@ export function renderMarkdown(report: ReviewReport): string {
     }
   }
 
-  lines.push("### What Looks Good");
-  lines.push("The reviewer did not flag additional issues beyond those listed above.");
-
   return lines.join("\n");
 }
 
