@@ -91,6 +91,12 @@ export interface ReferenceMatch {
   text: string;
 }
 
+interface ReferenceSearchOutcome {
+  label: string;
+  matches: ReferenceMatch[];
+  error?: string;
+}
+
 export interface RenderReviewContextOptions {
   quick?: boolean;
 }
@@ -368,27 +374,32 @@ async function findBatchReferences(
   ignoredPaths: Set<string>,
   diagnostics: string[],
 ): Promise<ReferenceMatch[]> {
-  const [gitMatches, rgMatches] = await Promise.all([
-    findBatchReferencesWithDiagnostics(
-      "git grep",
-      () => findBatchReferencesWithGitGrep(terms, ignoredPaths),
-      diagnostics,
+  const outcomes = await Promise.all([
+    findBatchReferencesWithOutcome("git grep", () =>
+      findBatchReferencesWithGitGrep(terms, ignoredPaths),
     ),
-    findBatchReferencesWithDiagnostics(
-      "ripgrep",
-      () => findBatchReferencesWithRipgrep(terms, ignoredPaths),
-      diagnostics,
+    findBatchReferencesWithOutcome("ripgrep", () =>
+      findBatchReferencesWithRipgrep(terms, ignoredPaths),
     ),
   ]);
+  const failures = outcomes.filter((outcome) => outcome.error);
+
+  if (failures.length === outcomes.length) {
+    for (const failure of failures) {
+      diagnostics.push(`Reference search with ${failure.label} failed: ${failure.error}.`);
+    }
+  }
 
   const seen = new Set<string>();
   const combined: ReferenceMatch[] = [];
 
-  for (const match of [...gitMatches, ...rgMatches]) {
-    const key = `${match.path}:${match.line}`;
-    if (!seen.has(key)) {
-      seen.add(key);
-      combined.push(match);
+  for (const outcome of outcomes) {
+    for (const match of outcome.matches) {
+      const key = `${match.path}:${match.line}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        combined.push(match);
+      }
     }
   }
 
@@ -401,16 +412,14 @@ async function findBatchReferences(
   return combined.slice(0, MAX_BATCH_REFERENCE_MATCHES);
 }
 
-async function findBatchReferencesWithDiagnostics(
+async function findBatchReferencesWithOutcome(
   label: string,
   search: () => Promise<ReferenceMatch[]>,
-  diagnostics: string[],
-): Promise<ReferenceMatch[]> {
+): Promise<ReferenceSearchOutcome> {
   try {
-    return await search();
+    return { label, matches: await search() };
   } catch (err) {
-    diagnostics.push(`Reference search with ${label} failed: ${formatReferenceSearchError(err)}.`);
-    return [];
+    return { label, matches: [], error: formatReferenceSearchError(err) };
   }
 }
 

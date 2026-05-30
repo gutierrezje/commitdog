@@ -26,6 +26,7 @@ import {
   isHookInstalled,
   checkHookStale,
   checkRecentHookFailure,
+  runHookReview,
 } from "./git/hooks.js";
 import { isGitRepo, hasCommits } from "./git/diff.js";
 import { buildReviewContext, renderReviewContext } from "./review/context.js";
@@ -439,6 +440,13 @@ hookCmd
     } else {
       console.log(chalk.yellow("No commitdog hook found"));
     }
+  });
+
+program
+  .command("hook-run", { hidden: true })
+  .description("Spawn a non-blocking hook review")
+  .action(async () => {
+    await runHookReview();
   });
 
 // Server commands

@@ -90,6 +90,11 @@ async function spawnServer(port: number): Promise<void> {
     cleanup: false,
   });
 
+  // Detached startup failures are reported by ensureServer's health check.
+  // Attach this immediately so a fast child exit cannot become an unhandled
+  // rejection before hook-mode reviews can write failure status.
+  void subprocess.catch(() => {});
+
   // Write PID for later cleanup
   if (subprocess.pid) {
     await writeFile(pidFile, String(subprocess.pid), "utf-8");

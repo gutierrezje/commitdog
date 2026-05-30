@@ -92,6 +92,59 @@ describe("buildReviewContext", () => {
     expect(rendered).toContain("return value + 2");
   });
 
+  it("does not warn when ripgrep fails but git grep provides references", async () => {
+    const root = await mkdtemp(join(tmpdir(), "commitdog-context-"));
+    tempDirs.push(root);
+    process.chdir(root);
+
+    await execa("git", ["init"]);
+    await mkdir("src");
+    await writeFile(
+      "src/example.ts",
+      ["export function calculateTotal(value: number) {", "  return value + 1;", "}", ""].join(
+        "\n",
+      ),
+      "utf-8",
+    );
+    await writeFile(
+      "src/consumer.ts",
+      "import { calculateTotal } from './example.js';\nconsole.log(calculateTotal(1));\n",
+      "utf-8",
+    );
+    await execa("git", ["add", "."]);
+    await execa("git", [
+      "-c",
+      "user.name=CommitDog Test",
+      "-c",
+      "user.email=commitdog@example.test",
+      "commit",
+      "-m",
+      "initial",
+    ]);
+
+    await writeFile(
+      "src/example.ts",
+      ["export function calculateTotal(value: number) {", "  return value + 2;", "}", ""].join(
+        "\n",
+      ),
+      "utf-8",
+    );
+    await execa("git", ["add", "src/example.ts"]);
+
+    const originalPath = process.env["PATH"];
+    process.env["PATH"] = "/usr/bin:/bin";
+    try {
+      const context = await buildReviewContext("staged", config);
+      const rendered = renderReviewContext(context);
+
+      expect(rendered).toContain("src/consumer.ts");
+      expect(context.diagnostics).toEqual([]);
+      expect(rendered).not.toContain("Context diagnostics");
+    } finally {
+      process.env["PATH"] = originalPath;
+    }
+  });
+
   it("skips lockfiles when building prompt context", async () => {
     const root = await mkdtemp(join(tmpdir(), "commitdog-context-"));
     tempDirs.push(root);

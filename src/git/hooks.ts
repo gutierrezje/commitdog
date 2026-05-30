@@ -1,12 +1,15 @@
 import { readFile, writeFile, chmod, unlink } from "node:fs/promises";
-import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { closeSync, existsSync, openSync, writeSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { execa } from "execa";
+import { ensureCommitDogDir } from "../config.js";
 
 const HOOK_MARKER = "# commitdog-managed";
 const HOOK_END_MARKER = "# end-commitdog";
 const HOOK_SHEBANG = "#!/bin/sh";
 const LAST_HOOK_STATUS = ".commitdog/last-hook-status.json";
+const HOOK_LOG_FILE = ".commitdog/hook.log";
 
 /**
  * Get the .git/hooks directory path
@@ -125,6 +128,42 @@ export async function checkRecentHookFailure(): Promise<HookFailure | undefined>
   }
 }
 
+export async function runHookReview(): Promise<void> {
+  const logFile = join(process.cwd(), HOOK_LOG_FILE);
+  await ensureCommitDogDir();
+
+  const outFd = openSync(logFile, "a");
+  try {
+    writeSync(
+      outFd,
+      `commitdog: review started at ${new Date().toString()}; latest report: .commitdog/reviews/latest.md\n`,
+    );
+
+    const subprocess = execa(
+      process.execPath,
+      [fileURLToPath(import.meta.url), "review", "--hook", "--quick"],
+      {
+        detached: true,
+        cleanup: false,
+        cwd: process.cwd(),
+        stdio: ["ignore", outFd, outFd] as any,
+        env: {
+          ...process.env,
+          PATH: buildHookPath(process.env["PATH"] ?? ""),
+        },
+      },
+    );
+    void subprocess.catch(() => {});
+    subprocess.unref();
+
+    console.log(
+      `commitdog: review started in background; log: ${HOOK_LOG_FILE}; latest report: .commitdog/reviews/latest.md`,
+    );
+  } finally {
+    closeSync(outFd);
+  }
+}
+
 /**
  * Check if the installed hook matches what the current generator would produce.
  * Returns stale=true if the managed section differs (e.g., missing --quick flag,
@@ -193,11 +232,46 @@ function extractManagedSection(content: string): string | undefined {
 
 interface HookCommand {
   commitdog: string;
+  node?: string;
+  cli?: string;
+  pathDirs?: string[];
 }
 
 async function resolveHookCommand(): Promise<HookCommand> {
+  const commitdog = await resolveCommand("commitdog");
+  const opencode = await resolveCommand("opencode");
+  const node = process.execPath;
   return {
-    commitdog: await resolveCommand("commitdog"),
+    commitdog,
+    node,
+    cli: fileURLToPath(import.meta.url),
+    pathDirs: uniqueDirs([node, commitdog, opencode]),
+  };
+}
+
+function uniqueDirs(paths: string[]): string[] {
+  const dirs = new Set<string>();
+  for (const path of paths) {
+    if (path.includes("/") || path.includes("\\")) {
+      dirs.add(dirname(path));
+    }
+  }
+  return [...dirs];
+}
+
+function buildHookPath(existingPath: string): string {
+  const command = resolveHookCommandSync();
+  const prefix = command.pathDirs?.join(":");
+  return prefix ? `${prefix}:${existingPath}` : existingPath;
+}
+
+function resolveHookCommandSync(): HookCommand {
+  const node = process.execPath;
+  return {
+    commitdog: "commitdog",
+    node,
+    cli: fileURLToPath(import.meta.url),
+    pathDirs: uniqueDirs([node]),
   };
 }
 
@@ -245,26 +319,34 @@ ${generateManagedSection(command)}`;
 export function generateManagedSection(command: HookCommand): string {
   const isPath = command.commitdog.includes("/") || command.commitdog.includes("\\");
   const quotedCommitDog = shellQuote(command.commitdog);
+  const quotedNode = command.node ? shellQuote(command.node) : undefined;
+  const quotedCli = command.cli ? shellQuote(command.cli) : undefined;
+  const pathPrefix = command.pathDirs?.length ? command.pathDirs.join(":") : undefined;
 
   let runBlock = "";
-  if (isPath) {
-    runBlock = `if [ -x ${quotedCommitDog} ]; then
-  echo "commitdog: review started in background; log: $COMMITDOG_LOG_FILE; latest report: .commitdog/reviews/latest.md"
-  echo "commitdog: review started at $(date); latest report: .commitdog/reviews/latest.md" >>"$COMMITDOG_LOG_FILE"
-  nohup ${quotedCommitDog} review --hook --quick >>"$COMMITDOG_LOG_FILE" 2>&1 </dev/null &
+  if (quotedNode && quotedCli) {
+    runBlock = `if [ -x ${quotedNode} ] && [ -f ${quotedCli} ]; then
+  ${quotedNode} ${quotedCli} hook-run
+elif [ -x ${quotedCommitDog} ]; then
+  ${quotedCommitDog} hook-run
 elif command -v commitdog >/dev/null 2>&1; then
-  echo "commitdog: review started in background; log: $COMMITDOG_LOG_FILE; latest report: .commitdog/reviews/latest.md"
-  echo "commitdog: review started at $(date); latest report: .commitdog/reviews/latest.md" >>"$COMMITDOG_LOG_FILE"
-  nohup commitdog review --hook --quick >>"$COMMITDOG_LOG_FILE" 2>&1 </dev/null &
+  commitdog hook-run
+else
+  echo "commitdog: review not started; commitdog command not found or not executable; log: $COMMITDOG_LOG_FILE"
+  echo "commitdog: review not started at $(date); commitdog command not found or not executable" >>"$COMMITDOG_LOG_FILE"
+fi`;
+  } else if (isPath) {
+    runBlock = `if [ -x ${quotedCommitDog} ]; then
+  ${quotedCommitDog} hook-run
+elif command -v commitdog >/dev/null 2>&1; then
+  commitdog hook-run
 else
   echo "commitdog: review not started; commitdog command not found or not executable; log: $COMMITDOG_LOG_FILE"
   echo "commitdog: review not started at $(date); commitdog command not found or not executable" >>"$COMMITDOG_LOG_FILE"
 fi`;
   } else {
     runBlock = `if command -v ${quotedCommitDog} >/dev/null 2>&1; then
-  echo "commitdog: review started in background; log: $COMMITDOG_LOG_FILE; latest report: .commitdog/reviews/latest.md"
-  echo "commitdog: review started at $(date); latest report: .commitdog/reviews/latest.md" >>"$COMMITDOG_LOG_FILE"
-  nohup ${quotedCommitDog} review --hook --quick >>"$COMMITDOG_LOG_FILE" 2>&1 </dev/null &
+  ${quotedCommitDog} hook-run
 else
   echo "commitdog: review not started; commitdog command not found or not executable; log: $COMMITDOG_LOG_FILE"
   echo "commitdog: review not started at $(date); commitdog command not found or not executable" >>"$COMMITDOG_LOG_FILE"
@@ -276,6 +358,9 @@ fi`;
 COMMITDOG_LOG_DIR=".commitdog"
 COMMITDOG_LOG_FILE="$COMMITDOG_LOG_DIR/hook.log"
 mkdir -p "$COMMITDOG_LOG_DIR"
+${pathPrefix ? `PATH=${shellQuote(pathPrefix)}":$PATH"
+export PATH
+` : ""}
 
 ${runBlock}
 ${HOOK_END_MARKER}

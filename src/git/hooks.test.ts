@@ -40,10 +40,9 @@ describe("installHook", () => {
 
     const hook = await readFile(hookPath, "utf-8");
     expect(hook.match(/^#!\/bin\/sh/gm)).toHaveLength(1);
-    expect(hook).toContain("nohup");
+    expect(hook).toContain("hook-run");
+    expect(hook).toContain("PATH=");
     expect(hook).toContain("COMMITDOG_LOG_FILE");
-    expect(hook).toContain("review --hook --quick >>");
-    expect(hook).toContain("review started at $(date)");
     expect(hook).not.toContain("commitdog review --hook &");
   });
 });
@@ -59,6 +58,19 @@ describe("generateManagedSection", () => {
     const section = generateManagedSection({ commitdog: "/usr/local/bin/commitdog" });
     expect(section).toContain("[ -x '/usr/local/bin/commitdog' ]");
     expect(section).toContain("command -v commitdog");
+  });
+
+  it("prefers the current node executable and extends PATH for hook environments", () => {
+    const section = generateManagedSection({
+      commitdog: "/usr/local/bin/commitdog",
+      node: "/opt/node/bin/node",
+      cli: "/usr/local/lib/commitdog/dist/cli.js",
+      pathDirs: ["/opt/node/bin", "/opt/homebrew/bin"],
+    });
+
+    expect(section).toContain("PATH='/opt/node/bin:/opt/homebrew/bin'\":$PATH\"");
+    expect(section).toContain("'/opt/node/bin/node' '/usr/local/lib/commitdog/dist/cli.js' hook-run");
+    expect(section).toContain("elif [ -x '/usr/local/bin/commitdog' ]; then");
   });
 
   it("does not report a started review when no commitdog command can run", async () => {
