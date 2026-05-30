@@ -28,6 +28,7 @@ describe("config", () => {
         "server:",
         "  port: 4096",
         "  auto_start: true",
+        "min_confidence: low",
         "include:",
         "  - '**/*'",
         "exclude: []",
@@ -46,6 +47,21 @@ describe("config", () => {
 
     expect(await realpath(savedPath)).toBe(await realpath(parentConfig));
     expect(await readFile(parentConfig, "utf-8")).toContain("provider/updated");
+  });
+
+  it("defaults invalid min_confidence to medium", async () => {
+    const root = await mkdtemp(join(tmpdir(), "commitdog-config-"));
+    tempDirs.push(root);
+    await writeFile(
+      join(root, ".commitdog.yml"),
+      "model: provider/model\nmin_confidence: noisy\n",
+      "utf-8",
+    );
+    process.chdir(root);
+
+    const config = await loadConfig();
+
+    expect(config.min_confidence).toBe("medium");
   });
 
   it("reports malformed yaml instead of silently using defaults", async () => {

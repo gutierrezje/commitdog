@@ -85,7 +85,6 @@ Runs a code review on your repository.
 - `--staged`: Reviews currently **staged changes** instead of the last commit.
 - `--hook`: Runs in background, non-blocking mode (used by Git hook).
 - `--quick`: Runs in quick review mode. This disables AI tool-calling, relying entirely on the pre-collected local diff context for a faster review.
-- `--min-confidence <level>`: Minimum confidence level of findings to report (`low`, `medium`, `high`). Defaults to `medium`.
 
 ```bash
 # Review last commit
@@ -93,9 +92,6 @@ commitdog
 
 # Review staged files
 commitdog review --staged
-
-# Review with lower confidence threshold
-commitdog review --min-confidence low
 ```
 
 ### `commitdog model`
@@ -153,6 +149,9 @@ model: github-copilot/claude-sonnet-4.5
 server:
   port: 4096
   auto_start: true
+
+# Minimum confidence level of findings to report: low, medium, or high
+min_confidence: medium
 
 # Review scope
 include:

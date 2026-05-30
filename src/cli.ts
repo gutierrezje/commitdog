@@ -4,7 +4,13 @@ import { Command } from "commander";
 import chalk from "chalk";
 import ora from "ora";
 import { createInterface } from "node:readline/promises";
-import { loadConfig, saveConfig, configExists, type CommitDogConfig } from "./config.js";
+import {
+  loadConfig,
+  saveConfig,
+  configExists,
+  type CommitDogConfig,
+  type ReviewConfidence,
+} from "./config.js";
 import {
   runReview,
   getAvailableModels,
@@ -61,7 +67,6 @@ program
   .option("--staged", "Review staged changes instead of last commit")
   .option("--hook", "Running from git hook (non-blocking mode)")
   .option("--quick", "Use a smaller local-only review prompt")
-  .option("--min-confidence <level>", "Minimum confidence level to report (low, medium, high)", "medium")
   .action(async (options) => {
     const totalStart = performance.now();
     const timings: ReviewTiming[] = [];
@@ -156,15 +161,8 @@ program
       spinner.succeed("Review complete.");
       console.log(); // Space after spinner
 
-      // Filter findings by confidence
-      const minConfidence = (options.minConfidence as string | undefined) ?? "medium";
-      const validLevels = ["low", "medium", "high"];
-      if (!validLevels.includes(minConfidence.toLowerCase())) {
-        spinner.stop();
-        console.error(chalk.red(`\nInvalid confidence level: "${minConfidence}". Must be one of: low, medium, high.`));
-        process.exit(1);
-      }
-      report.findings = filterFindingsByConfidence(report.findings, minConfidence);
+      // Filter findings by configured confidence threshold
+      report.findings = filterFindingsByConfidence(report.findings, config.min_confidence);
 
       // Filter findings by changed files (anchoring: only keep if file is modified in this diff, or confidence is high)
       const changedFilesSet = new Set<string>();
@@ -497,10 +495,12 @@ async function loadConfigOrExit(): Promise<CommitDogConfig> {
   }
 }
 
-function filterFindingsByConfidence(findings: ReviewFinding[], minConfidence: string): ReviewFinding[] {
+function filterFindingsByConfidence(
+  findings: ReviewFinding[],
+  minConfidence: ReviewConfidence,
+): ReviewFinding[] {
   const levels = ["low", "medium", "high"];
-  const minIndex = levels.indexOf(minConfidence.toLowerCase());
-  if (minIndex === -1) return findings;
+  const minIndex = levels.indexOf(minConfidence);
 
   return findings.filter((f) => {
     const idx = levels.indexOf(f.confidence.toLowerCase());
@@ -508,7 +508,10 @@ function filterFindingsByConfidence(findings: ReviewFinding[], minConfidence: st
   });
 }
 
-function filterFindingsByChangedFiles(findings: ReviewFinding[], changedFiles: Set<string>): ReviewFinding[] {
+function filterFindingsByChangedFiles(
+  findings: ReviewFinding[],
+  changedFiles: Set<string>,
+): ReviewFinding[] {
   return findings.filter((f) => {
     // If the file wasn't changed in this diff at all, it's a hallucinated file.
     // Drop it unconditionally, since confidence is not a guarantee of correctness.

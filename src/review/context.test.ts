@@ -22,6 +22,7 @@ const config: CommitDogConfig = {
     auto_start: true,
   },
   timeout: 300,
+  min_confidence: "medium",
   include: ["**/*"],
   exclude: [],
   rules: [],
