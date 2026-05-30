@@ -139,6 +139,11 @@ export async function runHookReview(): Promise<void> {
       `diffowl: review started at ${new Date().toString()}; latest report: .diffowl/reviews/latest.md\n`,
     );
 
+    const command = await resolveHookCommand();
+    const prefix = command.pathDirs?.join(":");
+    const existingPath = process.env["PATH"] ?? "";
+    const envPath = prefix ? `${prefix}:${existingPath}` : existingPath;
+
     const subprocess = execa(
       process.execPath,
       [fileURLToPath(import.meta.url), "review", "--hook", "--quick"],
@@ -149,7 +154,7 @@ export async function runHookReview(): Promise<void> {
         stdio: ["ignore", outFd, outFd] as any,
         env: {
           ...process.env,
-          PATH: buildHookPath(process.env["PATH"] ?? ""),
+          PATH: envPath,
         },
       },
     );
@@ -259,21 +264,6 @@ function uniqueDirs(paths: string[]): string[] {
   return [...dirs];
 }
 
-function buildHookPath(existingPath: string): string {
-  const command = resolveHookCommandSync();
-  const prefix = command.pathDirs?.join(":");
-  return prefix ? `${prefix}:${existingPath}` : existingPath;
-}
-
-function resolveHookCommandSync(): HookCommand {
-  const node = process.execPath;
-  return {
-    diffowl: "diffowl",
-    node,
-    cli: fileURLToPath(import.meta.url),
-    pathDirs: uniqueDirs([node]),
-  };
-}
 
 async function resolveCommand(command: string): Promise<string> {
   const isWin = process.platform === "win32";

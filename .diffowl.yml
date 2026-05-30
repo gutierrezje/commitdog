@@ -1,7 +1,8 @@
-model: opencode-go/big-pickle
+model: opencode-go/kimi-k2.6
 server:
   port: 4096
   auto_start: true
+timeout: 300
 min_confidence: medium
 include:
   - "**/*"

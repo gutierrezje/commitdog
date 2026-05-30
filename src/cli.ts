@@ -255,68 +255,8 @@ program
 
 async function runInit() {
   console.log(chalk.bold("DiffOwl Setup\n"));
-
   const config = await loadConfigOrExit();
-
-  const spinner = ora("Querying available models from OpenCode...").start();
-  let models: string[] = [];
-  try {
-    models = await getAvailableModels(config.server.port);
-    spinner.stop();
-  } catch {
-    spinner.fail("Failed to query models from OpenCode server.");
-  }
-
-  let selectedModel = config.model;
-
-  if (models.length > 0) {
-    console.log(chalk.bold("Available models configured in OpenCode:"));
-    models.forEach((m, idx) => {
-      console.log(`  ${chalk.cyan(idx + 1)}. ${m}`);
-    });
-    console.log();
-
-    const rl = createInterface({
-      input: process.stdin,
-      output: process.stdout,
-    });
-
-    try {
-      while (true) {
-        const answer = await rl.question(
-          chalk.yellow(`Select a model number (1-${models.length}) [default: 1]: `),
-        );
-        const trimmed = answer.trim();
-        if (trimmed === "") {
-          selectedModel = models[0]!;
-          break;
-        }
-        const num = parseInt(trimmed, 10);
-        if (num >= 1 && num <= models.length) {
-          selectedModel = models[num - 1]!;
-          break;
-        }
-        console.log(chalk.red("Invalid selection. Please enter a valid number."));
-      }
-    } finally {
-      rl.close();
-    }
-  } else {
-    console.log(chalk.yellow("No active/connected providers found in OpenCode."));
-    console.log(
-      chalk.dim("Make sure you run ") +
-        chalk.cyan("opencode") +
-        chalk.dim(" to authenticate and set up your providers/keys first."),
-    );
-    console.log(chalk.dim("Using fallback default model: ") + chalk.cyan(config.model));
-    console.log();
-  }
-
-  config.model = selectedModel;
-  const configPath = await saveConfig(config);
-  console.log(chalk.green(`✓ Config saved to ${configPath}`));
-  console.log(chalk.dim(`Model set to: `) + chalk.cyan(selectedModel));
-  console.log();
+  await selectModelInteractively(config, { allowKeepCurrent: false });
 }
 
 // Model command
@@ -329,56 +269,7 @@ program
 
     if (!model) {
       console.log(chalk.bold("Current model: ") + chalk.cyan(config.model));
-
-      const spinner = ora("Querying available models from OpenCode...").start();
-      let models: string[] = [];
-      try {
-        models = await getAvailableModels(config.server.port);
-        spinner.stop();
-      } catch {
-        spinner.fail("Failed to query models from OpenCode server.");
-      }
-
-      if (models.length > 0) {
-        console.log(chalk.bold("\nAvailable models configured in OpenCode:"));
-        models.forEach((m, idx) => {
-          console.log(`  ${chalk.cyan(idx + 1)}. ${m}`);
-        });
-        console.log();
-
-        const rl = createInterface({
-          input: process.stdin,
-          output: process.stdout,
-        });
-
-        try {
-          while (true) {
-            const answer = await rl.question(
-              chalk.yellow(
-                `Select a model number (1-${models.length}) or press Enter to keep current: `,
-              ),
-            );
-            const trimmed = answer.trim();
-            if (trimmed === "") {
-              break; // Keep current model
-            }
-            const num = parseInt(trimmed, 10);
-            if (num >= 1 && num <= models.length) {
-              const newModel = models[num - 1]!;
-              config.model = newModel;
-              await saveConfig(config);
-              console.log(chalk.green(`✓ Model set to ${chalk.cyan(newModel)}`));
-              break;
-            }
-            console.log(chalk.red("Invalid selection. Please enter a valid number."));
-          }
-        } finally {
-          rl.close();
-        }
-      } else {
-        console.log(chalk.dim("\nTo change manually: diffowl model <provider/model>"));
-        console.log(chalk.dim("Example: diffowl model opencode-go/big-pickle"));
-      }
+      await selectModelInteractively(config, { allowKeepCurrent: true });
       return;
     }
 
@@ -387,6 +278,92 @@ program
     console.log(chalk.green(`✓ Model set to ${chalk.cyan(model)}`));
     console.log(chalk.dim(`Config: ${configPath}`));
   });
+
+async function selectModelInteractively(
+  config: DiffOwlConfig,
+  options: { allowKeepCurrent: boolean },
+): Promise<void> {
+  const spinner = ora("Querying available models from OpenCode...").start();
+  let models: string[] = [];
+  try {
+    models = await getAvailableModels(config.server.port);
+    spinner.stop();
+  } catch {
+    spinner.fail("Failed to query models from OpenCode server.");
+  }
+
+  let selectedModel = config.model;
+
+  if (models.length > 0) {
+    console.log(
+      chalk.bold(
+        options.allowKeepCurrent
+          ? "\nAvailable models configured in OpenCode:"
+          : "Available models configured in OpenCode:",
+      ),
+    );
+    models.forEach((m, idx) => {
+      console.log(`  ${chalk.cyan(idx + 1)}. ${m}`);
+    });
+    console.log();
+
+    const rl = createInterface({
+      input: process.stdin,
+      output: process.stdout,
+    });
+
+    try {
+      while (true) {
+        const promptText = options.allowKeepCurrent
+          ? `Select a model number (1-${models.length}) or press Enter to keep current: `
+          : `Select a model number (1-${models.length}) [default: 1]: `;
+
+        const answer = await rl.question(chalk.yellow(promptText));
+        const trimmed = answer.trim();
+
+        if (trimmed === "") {
+          if (options.allowKeepCurrent) {
+            break; // Keep current model
+          } else {
+            selectedModel = models[0]!;
+            break;
+          }
+        }
+
+        const num = parseInt(trimmed, 10);
+        if (num >= 1 && num <= models.length) {
+          selectedModel = models[num - 1]!;
+          break;
+        }
+        console.log(chalk.red("Invalid selection. Please enter a valid number."));
+      }
+    } finally {
+      rl.close();
+    }
+  } else {
+    console.log(chalk.yellow("\nNo active/connected providers found in OpenCode."));
+    console.log(
+      chalk.dim("Make sure you run ") +
+        chalk.cyan("opencode") +
+        chalk.dim(" to authenticate and set up your providers/keys first."),
+    );
+    console.log(chalk.dim("Using fallback default model: ") + chalk.cyan(config.model));
+    console.log();
+  }
+
+  // Only update/save if a new model was selected or config is being initialized
+  if (selectedModel !== config.model || !options.allowKeepCurrent) {
+    config.model = selectedModel;
+    const configPath = await saveConfig(config);
+    if (options.allowKeepCurrent) {
+      console.log(chalk.green(`✓ Model set to ${chalk.cyan(selectedModel)}`));
+    } else {
+      console.log(chalk.green(`✓ Config saved to ${configPath}`));
+      console.log(chalk.dim(`Model set to: `) + chalk.cyan(selectedModel));
+    }
+    console.log();
+  }
+}
 
 // Hook commands
 const hookCmd = program.command("hook").description("Manage git hooks");
