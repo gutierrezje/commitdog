@@ -7,7 +7,7 @@ import { execa } from "execa";
 import picomatch from "picomatch";
 import type tsType from "typescript";
 import { getLastCommitDiff, getStagedDiff, parseGitDiffLine, type DiffFile, type DiffResult } from "../git/diff.js";
-import type { CommitDogConfig } from "../config.js";
+import type { DiffOwlConfig } from "../config.js";
 
 type tsNode = tsType.Node;
 type tsIdentifier = tsType.Identifier;
@@ -103,7 +103,7 @@ export interface RenderReviewContextOptions {
 
 export async function buildReviewContext(
   mode: "last-commit" | "staged",
-  config: CommitDogConfig,
+  config: DiffOwlConfig,
 ): Promise<ReviewContext> {
   const diff = mode === "staged" ? await getStagedDiff() : await getLastCommitDiff();
   const reviewableFiles = diff.files.filter((file) => shouldReviewFile(file.path, config));
@@ -464,7 +464,7 @@ async function findBatchReferencesWithRipgrep(
       "--glob",
       "!dist/**",
       "--glob",
-      "!.commitdog/**",
+      "!.diffowl/**",
       "--glob",
       "!.git/**",
       "--glob",
@@ -503,7 +503,7 @@ function parseReferenceLine(line: string): ReferenceMatch | undefined {
   };
 }
 
-function shouldReviewFile(path: string, config: CommitDogConfig): boolean {
+function shouldReviewFile(path: string, config: DiffOwlConfig): boolean {
   if (LOCKFILE_EXCLUDES.includes(path)) return false;
 
   const include = config.include.length > 0 ? config.include : ["**/*"];

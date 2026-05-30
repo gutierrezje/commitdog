@@ -2,7 +2,7 @@ import { execa } from "execa";
 import { existsSync } from "node:fs";
 import { readFile, writeFile, unlink } from "node:fs/promises";
 import { join } from "node:path";
-import { ensureCommitDogDir, getCommitDogDir } from "../config.js";
+import { ensureDiffOwlDir, getDiffOwlDir } from "../config.js";
 
 const HEALTH_TIMEOUT_MS = 2000;
 const STARTUP_WAIT_MS = 3000;
@@ -79,7 +79,7 @@ async function checkOpencodeInstalled(): Promise<void> {
  * Spawn opencode serve as a detached background process
  */
 async function spawnServer(port: number): Promise<void> {
-  const dir = await ensureCommitDogDir();
+  const dir = await ensureDiffOwlDir();
   const pidFile = join(dir, "server.pid");
 
   await checkOpencodeInstalled();
@@ -108,7 +108,7 @@ async function spawnServer(port: number): Promise<void> {
  * Stop a previously spawned server
  */
 export async function stopServer(): Promise<boolean> {
-  const dir = getCommitDogDir();
+  const dir = getDiffOwlDir();
   const pidFile = join(dir, "server.pid");
 
   if (!existsSync(pidFile)) return false;

@@ -16,7 +16,7 @@ afterEach(async () => {
 
 describe("installHook", () => {
   it("refreshes existing managed hooks with a detached logged runner", async () => {
-    const root = await mkdtemp(join(tmpdir(), "commitdog-hooks-"));
+    const root = await mkdtemp(join(tmpdir(), "diffowl-hooks-"));
     tempDirs.push(root);
     await execa("git", ["init"], { cwd: root });
 
@@ -42,7 +42,7 @@ describe("installHook", () => {
     expect(hook.match(/^#!\/bin\/sh/gm)).toHaveLength(1);
     expect(hook).toContain("hook-run");
     expect(hook).toContain("PATH=");
-    expect(hook).toContain("COMMITDOG_LOG_FILE");
+    expect(hook).toContain("DIFFOWL_LOG_FILE");
     expect(hook).not.toContain("commitdog review --hook &");
   });
 });
@@ -50,45 +50,45 @@ describe("installHook", () => {
 describe("generateManagedSection", () => {
   it("omits -x check and uses command -v directly for bare command names", () => {
     const section = generateManagedSection({
-      commitdog: "commitdog",
+      diffowl: "diffowl",
       node: "/opt/node/bin/node",
-      cli: "/usr/local/lib/commitdog/dist/cli.js",
+      cli: "/usr/local/lib/diffowl/dist/cli.js",
       pathDirs: [],
     });
-    expect(section).not.toContain("[ -x 'commitdog' ]");
-    expect(section).toContain("command -v commitdog");
+    expect(section).not.toContain("[ -x 'diffowl' ]");
+    expect(section).toContain("command -v diffowl");
   });
 
   it("includes -x check for absolute or relative paths with separators", () => {
     const section = generateManagedSection({
-      commitdog: "/usr/local/bin/commitdog",
+      diffowl: "/usr/local/bin/diffowl",
       node: "/opt/node/bin/node",
-      cli: "/usr/local/lib/commitdog/dist/cli.js",
+      cli: "/usr/local/lib/diffowl/dist/cli.js",
       pathDirs: [],
     });
-    expect(section).toContain("[ -x '/usr/local/bin/commitdog' ]");
-    expect(section).toContain("command -v commitdog");
+    expect(section).toContain("[ -x '/usr/local/bin/diffowl' ]");
+    expect(section).toContain("command -v diffowl");
   });
 
   it("prefers the current node executable and extends PATH for hook environments", () => {
     const section = generateManagedSection({
-      commitdog: "/usr/local/bin/commitdog",
+      diffowl: "/usr/local/bin/diffowl",
       node: "/opt/node/bin/node",
-      cli: "/usr/local/lib/commitdog/dist/cli.js",
+      cli: "/usr/local/lib/diffowl/dist/cli.js",
       pathDirs: ["/opt/node/bin", "/opt/homebrew/bin"],
     });
 
     expect(section).toContain("PATH='/opt/node/bin:/opt/homebrew/bin'\":$PATH\"");
     expect(section).toContain(
-      "'/opt/node/bin/node' '/usr/local/lib/commitdog/dist/cli.js' hook-run",
+      "'/opt/node/bin/node' '/usr/local/lib/diffowl/dist/cli.js' hook-run",
     );
-    expect(section).toContain("elif [ -x '/usr/local/bin/commitdog' ]; then");
+    expect(section).toContain("elif [ -x '/usr/local/bin/diffowl' ]; then");
   });
 
   it.skipIf(process.platform === "win32")(
-    "does not report a started review when no commitdog command can run",
+    "does not report a started review when no diffowl command can run",
     async () => {
-      const root = await mkdtemp(join(tmpdir(), "commitdog-hooks-"));
+      const root = await mkdtemp(join(tmpdir(), "diffowl-hooks-"));
       tempDirs.push(root);
       const scriptPath = join(root, "post-commit");
       await writeFile(
@@ -96,7 +96,7 @@ describe("generateManagedSection", () => {
         [
           "#!/bin/sh",
           generateManagedSection({
-            commitdog: "/missing/commitdog",
+            diffowl: "/missing/diffowl",
             node: "/missing/node",
             cli: "/missing/cli.js",
             pathDirs: [],
@@ -109,12 +109,12 @@ describe("generateManagedSection", () => {
         cwd: root,
         env: { PATH: "/usr/bin:/bin" },
       });
-      const log = await readFile(join(root, ".commitdog", "hook.log"), "utf-8");
+      const log = await readFile(join(root, ".diffowl", "hook.log"), "utf-8");
 
-      expect(stdout).toContain("commitdog: review not started");
-      expect(stdout).not.toContain("commitdog: review started in background");
-      expect(log).toContain("commitdog: review not started");
-      expect(log).not.toContain("commitdog: review started at");
+      expect(stdout).toContain("diffowl: review not started");
+      expect(stdout).not.toContain("diffowl: review started in background");
+      expect(log).toContain("diffowl: review not started");
+      expect(log).not.toContain("diffowl: review started at");
     },
   );
 });

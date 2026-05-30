@@ -3,13 +3,13 @@ import { closeSync, existsSync, openSync, writeSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execa } from "execa";
-import { ensureCommitDogDir } from "../config.js";
+import { ensureDiffOwlDir } from "../config.js";
 
-const HOOK_MARKER = "# commitdog-managed";
-const HOOK_END_MARKER = "# end-commitdog";
+const HOOK_MARKER = "# diffowl-managed";
+const HOOK_END_MARKER = "# end-diffowl";
 const HOOK_SHEBANG = "#!/bin/sh";
-const LAST_HOOK_STATUS = ".commitdog/last-hook-status.json";
-const HOOK_LOG_FILE = ".commitdog/hook.log";
+const LAST_HOOK_STATUS = ".diffowl/last-hook-status.json";
+const HOOK_LOG_FILE = ".diffowl/hook.log";
 
 /**
  * Get the .git/hooks directory path
@@ -30,7 +30,7 @@ export async function installHook(): Promise<string> {
   // Check if hook already exists and is not ours
   if (existsSync(hookPath)) {
     const existing = await readFile(hookPath, "utf-8");
-    const base = existing.includes(HOOK_MARKER)
+    const base = existing.includes(HOOK_MARKER) || existing.includes("# commitdog-managed")
       ? removeManagedSection(existing)
       : existing.trimEnd();
     const hookSection = generateManagedSection(command);
@@ -55,7 +55,7 @@ export async function uninstallHook(): Promise<boolean> {
   if (!existsSync(hookPath)) return false;
 
   const content = await readFile(hookPath, "utf-8");
-  if (!content.includes(HOOK_MARKER)) return false;
+  if (!content.includes(HOOK_MARKER) && !content.includes("# commitdog-managed")) return false;
 
   const cleaned = removeManagedSection(content);
   if (isOnlyShebangs(cleaned) || cleaned === "") {
@@ -130,13 +130,13 @@ export async function checkRecentHookFailure(): Promise<HookFailure | undefined>
 
 export async function runHookReview(): Promise<void> {
   const logFile = join(process.cwd(), HOOK_LOG_FILE);
-  await ensureCommitDogDir();
+  await ensureDiffOwlDir();
 
   const outFd = openSync(logFile, "a");
   try {
     writeSync(
       outFd,
-      `commitdog: review started at ${new Date().toString()}; latest report: .commitdog/reviews/latest.md\n`,
+      `diffowl: review started at ${new Date().toString()}; latest report: .diffowl/reviews/latest.md\n`,
     );
 
     const subprocess = execa(
@@ -157,7 +157,7 @@ export async function runHookReview(): Promise<void> {
     subprocess.unref();
 
     console.log(
-      `commitdog: review started in background; log: ${HOOK_LOG_FILE}; latest report: .commitdog/reviews/latest.md`,
+      `diffowl: review started in background; log: ${HOOK_LOG_FILE}; latest report: .diffowl/reviews/latest.md`,
     );
   } finally {
     closeSync(outFd);
@@ -192,7 +192,7 @@ export async function checkHookStale(): Promise<HookStatus> {
   }
 
   if (!content.includes(HOOK_MARKER)) {
-    return { installed: false, stale: false, reason: "Hook exists but is not commitdog-managed" };
+    return { installed: false, stale: false, reason: "Hook exists but is not diffowl-managed" };
   }
 
   let command: HookCommand;
@@ -200,7 +200,7 @@ export async function checkHookStale(): Promise<HookStatus> {
     command = await resolveHookCommand();
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    return { installed: true, stale: false, reason: `Cannot resolve commitdog command: ${message}` };
+    return { installed: true, stale: false, reason: `Cannot resolve diffowl command: ${message}` };
   }
 
   const expected = generateManagedSection(command);
@@ -231,21 +231,21 @@ function extractManagedSection(content: string): string | undefined {
 }
 
 interface HookCommand {
-  commitdog: string;
+  diffowl: string;
   node: string;
   cli: string;
   pathDirs: string[];
 }
 
 async function resolveHookCommand(): Promise<HookCommand> {
-  const commitdog = await resolveCommand("commitdog");
+  const diffowl = await resolveCommand("diffowl");
   const opencode = await resolveCommand("opencode");
   const node = process.execPath;
   return {
-    commitdog,
+    diffowl,
     node,
     cli: fileURLToPath(import.meta.url),
-    pathDirs: uniqueDirs([node, commitdog, opencode]),
+    pathDirs: uniqueDirs([node, diffowl, opencode]),
   };
 }
 
@@ -268,7 +268,7 @@ function buildHookPath(existingPath: string): string {
 function resolveHookCommandSync(): HookCommand {
   const node = process.execPath;
   return {
-    commitdog: "commitdog",
+    diffowl: "diffowl",
     node,
     cli: fileURLToPath(import.meta.url),
     pathDirs: uniqueDirs([node]),
@@ -292,15 +292,18 @@ async function resolveCommand(command: string): Promise<string> {
 }
 
 function removeManagedSection(content: string): string {
-  const lines = content.split("\n");
-  const ourStart = lines.findIndex((line) => line.includes(HOOK_MARKER));
-  if (ourStart === -1) return content.trim();
+  let lines = content.split("\n");
+  lines = removeSectionByMarkers(lines, "# diffowl-managed", "# end-diffowl");
+  lines = removeSectionByMarkers(lines, "# commitdog-managed", "# end-commitdog");
+  return lines.join("\n").trim();
+}
 
-  const ourEnd = lines.findIndex(
-    (line, index) => index > ourStart && line.includes(HOOK_END_MARKER),
-  );
-  const endIndex = ourEnd === -1 ? ourStart : ourEnd;
-  return [...lines.slice(0, ourStart), ...lines.slice(endIndex + 1)].join("\n").trim();
+function removeSectionByMarkers(lines: string[], startMarker: string, endMarker: string): string[] {
+  const start = lines.findIndex((line) => line.includes(startMarker));
+  if (start === -1) return lines;
+  const end = lines.findIndex((line, index) => index > start && line.includes(endMarker));
+  const endIndex = end === -1 ? start : end;
+  return [...lines.slice(0, start), ...lines.slice(endIndex + 1)];
 }
 
 function isOnlyShebangs(content: string): boolean {
@@ -317,31 +320,31 @@ ${generateManagedSection(command)}`;
 }
 
 export function generateManagedSection(command: HookCommand): string {
-  const isPath = command.commitdog.includes("/") || command.commitdog.includes("\\");
-  const quotedCommitDog = shellQuote(command.commitdog);
+  const isPath = command.diffowl.includes("/") || command.diffowl.includes("\\");
+  const quotedDiffOwl = shellQuote(command.diffowl);
   const quotedNode = shellQuote(command.node);
   const quotedCli = shellQuote(command.cli);
   const pathPrefix = command.pathDirs.length ? command.pathDirs.join(":") : undefined;
-  const commitdogPathFallback = isPath
-    ? `elif [ -x ${quotedCommitDog} ]; then
-  ${quotedCommitDog} hook-run
+  const diffowlPathFallback = isPath
+    ? `elif [ -x ${quotedDiffOwl} ]; then
+  ${quotedDiffOwl} hook-run
 `
     : "";
 
   const runBlock = `if [ -x ${quotedNode} ] && [ -f ${quotedCli} ]; then
   ${quotedNode} ${quotedCli} hook-run
-${commitdogPathFallback}elif command -v commitdog >/dev/null 2>&1; then
-  commitdog hook-run
+${diffowlPathFallback}elif command -v diffowl >/dev/null 2>&1; then
+  diffowl hook-run
 else
-  echo "commitdog: review not started; commitdog command not found or not executable; log: $COMMITDOG_LOG_FILE"
-  echo "commitdog: review not started at $(date); commitdog command not found or not executable" >>"$COMMITDOG_LOG_FILE"
+  echo "diffowl: review not started; diffowl command not found or not executable; log: $DIFFOWL_LOG_FILE"
+  echo "diffowl: review not started at $(date); diffowl command not found or not executable" >>"$DIFFOWL_LOG_FILE"
 fi`;
 
   return `${HOOK_MARKER}
-# Run commitdog review in the background (non-blocking)
-COMMITDOG_LOG_DIR=".commitdog"
-COMMITDOG_LOG_FILE="$COMMITDOG_LOG_DIR/hook.log"
-mkdir -p "$COMMITDOG_LOG_DIR"
+# Run diffowl review in the background (non-blocking)
+DIFFOWL_LOG_DIR=".diffowl"
+DIFFOWL_LOG_FILE="$DIFFOWL_LOG_DIR/hook.log"
+mkdir -p "$DIFFOWL_LOG_DIR"
 ${pathPrefix ? `PATH=${shellQuote(pathPrefix)}":$PATH"
 export PATH
 ` : ""}

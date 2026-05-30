@@ -4,7 +4,7 @@ const mocks = vi.hoisted(() => ({
   execa: vi.fn(),
   fetch: vi.fn(),
   writeFile: vi.fn(),
-  ensureCommitDogDir: vi.fn(),
+  ensureDiffOwlDir: vi.fn(),
 }));
 
 vi.mock("execa", () => ({
@@ -23,7 +23,7 @@ vi.mock("../config.js", async () => {
   const actual = await vi.importActual<typeof import("../config.js")>("../config.js");
   return {
     ...actual,
-    ensureCommitDogDir: mocks.ensureCommitDogDir,
+    ensureDiffOwlDir: mocks.ensureDiffOwlDir,
   };
 });
 
@@ -44,7 +44,7 @@ describe("ensureServer", () => {
     child.pid = 12345;
     child.unref = vi.fn();
 
-    mocks.ensureCommitDogDir.mockResolvedValue("/tmp/commitdog");
+    mocks.ensureDiffOwlDir.mockResolvedValue("/tmp/diffowl");
     mocks.writeFile.mockResolvedValue(undefined);
     mocks.execa
       .mockResolvedValueOnce({ stdout: "/usr/local/bin/opencode" })

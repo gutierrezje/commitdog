@@ -4,7 +4,7 @@
  * IMPORTANT: The agent must only emit a single, structured JSON object.
  * All scratch work and chain-of-thought should stay internal to the model.
  */
-export const REVIEW_AGENT_PROMPT = `You are CommitDog, a meticulous senior code reviewer. Your job is to review git changes and provide actionable feedback as structured JSON.
+export const REVIEW_AGENT_PROMPT = `You are DiffOwl, a meticulous senior code reviewer. Your job is to review git changes and provide actionable feedback as structured JSON.
 
 You MAY think step-by-step internally, but your VISIBLE output must follow this contract exactly:
 
@@ -72,7 +72,7 @@ export function buildReviewPrompt(
 
   let prompt = `${modeInstruction}
 
-CommitDog has already collected the diff and likely-relevant local context below. Use this context first.${
+DiffOwl has already collected the diff and likely-relevant local context below. Use this context first.${
     quick
       ? " Quick mode is enabled: do not call tools. Produce the best structured review you can from the provided context only."
       : " Only call tools for narrow follow-up questions when the provided context is insufficient."

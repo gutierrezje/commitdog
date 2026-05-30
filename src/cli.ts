@@ -8,7 +8,7 @@ import {
   loadConfig,
   saveConfig,
   configExists,
-  type CommitDogConfig,
+  type DiffOwlConfig,
   type ReviewConfidence,
 } from "./config.js";
 import {
@@ -43,7 +43,7 @@ import { join } from "node:path";
 
 async function writeHookStatus(exitCode: number): Promise<void> {
   try {
-    const statusPath = join(process.cwd(), ".commitdog", "last-hook-status.json");
+    const statusPath = join(process.cwd(), ".diffowl", "last-hook-status.json");
     await writeFile(
       statusPath,
       JSON.stringify({ exitCode, timestamp: new Date().toISOString() }, null, 2),
@@ -57,7 +57,7 @@ async function writeHookStatus(exitCode: number): Promise<void> {
 const program = new Command();
 
 program
-  .name("commitdog")
+  .name("diffowl")
   .description("Local AI code review agent powered by OpenCode")
   .version("0.1.0");
 
@@ -83,7 +83,7 @@ program
 
     // First run: prompt for setup
     if (!configExists()) {
-      console.log(chalk.yellow("No .commitdog.yml found. Running first-time setup...\n"));
+      console.log(chalk.yellow("No .diffowl.yml found. Running first-time setup...\n"));
       await runInit();
     }
 
@@ -106,7 +106,7 @@ program
     if (hookFailure) {
       console.log(
         chalk.yellow(
-          `⚠ Post-commit hook failed at ${new Date(hookFailure.timestamp).toLocaleString()}. Check .commitdog/hook.log`,
+          `⚠ Post-commit hook failed at ${new Date(hookFailure.timestamp).toLocaleString()}. Check .diffowl/hook.log`,
         ),
       );
       console.log();
@@ -248,13 +248,13 @@ function formatDuration(ms: number): string {
 // Init command
 program
   .command("init")
-  .description("Set up CommitDog for this project")
+  .description("Set up DiffOwl for this project")
   .action(async () => {
     await runInit();
   });
 
 async function runInit() {
-  console.log(chalk.bold("CommitDog Setup\n"));
+  console.log(chalk.bold("DiffOwl Setup\n"));
 
   const config = await loadConfigOrExit();
 
@@ -376,8 +376,8 @@ program
           rl.close();
         }
       } else {
-        console.log(chalk.dim("\nTo change manually: commitdog model <provider/model>"));
-        console.log(chalk.dim("Example: commitdog model opencode-go/big-pickle"));
+        console.log(chalk.dim("\nTo change manually: diffowl model <provider/model>"));
+        console.log(chalk.dim("Example: diffowl model opencode-go/big-pickle"));
       }
       return;
     }
@@ -406,7 +406,7 @@ hookCmd
     console.log(chalk.green(`✓ Post-commit hook ${action}: ${hookPath}`));
     console.log(chalk.dim("Reviews will run automatically after each commit (non-blocking)"));
     console.log(
-      chalk.dim("Hook output: .commitdog/hook.log; latest report: .commitdog/reviews/latest.md"),
+      chalk.dim("Hook output: .diffowl/hook.log; latest report: .diffowl/reviews/latest.md"),
     );
   });
 
@@ -424,7 +424,7 @@ hookCmd
     if (status.stale) {
       console.log(chalk.yellow("⚠ Hook is installed but stale"));
       console.log(chalk.dim(`Reason: ${status.reason}`));
-      console.log(chalk.dim("Run `commitdog hook install` to update it."));
+      console.log(chalk.dim("Run `diffowl hook install` to update it."));
       return;
     }
 
@@ -438,7 +438,7 @@ hookCmd
     if (await uninstallHook()) {
       console.log(chalk.green("✓ Hook removed"));
     } else {
-      console.log(chalk.yellow("No commitdog hook found"));
+      console.log(chalk.yellow("No diffowl hook found"));
     }
   });
 
@@ -493,7 +493,7 @@ serverCmd
 
 program.parse();
 
-async function loadConfigOrExit(): Promise<CommitDogConfig> {
+async function loadConfigOrExit(): Promise<DiffOwlConfig> {
   try {
     return await loadConfig();
   } catch (err) {

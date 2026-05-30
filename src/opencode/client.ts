@@ -1,7 +1,7 @@
 import { createOpencode, createOpencodeClient } from "@opencode-ai/sdk";
 import { isServerRunning, ensureServer } from "./server.js";
 import { REVIEW_AGENT_PROMPT, buildReviewPrompt } from "./agent.js";
-import type { CommitDogConfig } from "../config.js";
+import type { DiffOwlConfig } from "../config.js";
 
 export type ReviewSeverity = "error" | "warning" | "info";
 
@@ -25,7 +25,7 @@ export interface ReviewReport {
 
 export interface ReviewOptions {
   mode: "last-commit" | "staged";
-  config: CommitDogConfig;
+  config: DiffOwlConfig;
   localContext?: string;
   quick?: boolean;
   onProgress?: (event: ReviewProgressEvent) => void;

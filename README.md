@@ -1,9 +1,9 @@
-# CommitDog
+# DiffOwl
 
 > **Local AI Code Review Agent powered by [OpenCode](https://opencode.ai)**
 > Build-time quality reviews, running locally, on your own terms.
 
-CommitDog is a lightweight CLI that integrates into your Git workflow to provide high-quality code reviews locally. Instead of rebuilding LLM integrations or managing provider keys from scratch, CommitDog orchestrates a headless [OpenCode Server](https://opencode.ai/docs/server/) session and delegates the repository analysis to the local agent, which uses its own advanced reasoning and file tools.
+DiffOwl is a lightweight CLI that integrates into your Git workflow to provide high-quality code reviews locally. Instead of rebuilding LLM integrations or managing provider keys from scratch, DiffOwl orchestrates a headless [OpenCode Server](https://opencode.ai/docs/server/) session and delegates the repository analysis to the local agent, which uses its own advanced reasoning and file tools.
 
 ---
 
@@ -15,7 +15,7 @@ CommitDog is a lightweight CLI that integrates into your Git workflow to provide
 - **Intelligent File Filtering**: Supports `include` and `exclude` glob patterns to focus reviews on source directories while skipping build artifacts, lockfiles, and node modules.
 - **Project-Specific Rules**: Inject custom guidelines directly into the reviewer's system prompt (e.g., "Check for SQL injection", "Ensure TypeScript types are explicit").
 - **Interactive Model Selector**: Automatically queries OpenCode to present a clean, interactive list of your connected providers and models.
-- **Local Reports**: Generates comprehensive markdown reviews and saves them locally under `.commitdog/reviews/` for easy viewing.
+- **Local Reports**: Generates comprehensive markdown reviews and saves them locally under `.diffowl/reviews/` for easy viewing.
 
 ---
 
@@ -30,13 +30,13 @@ CommitDog is a lightweight CLI that integrates into your Git workflow to provide
 2. **Set up a Provider & Model**:
    Run `opencode` in your terminal, connect a provider (e.g., GitHub Copilot, OpenAI, Ollama, etc.), and verify it is active.
 
-### 2. Install CommitDog
+### 2. Install DiffOwl
 
 Clone the repository and build/link the CLI globally:
 
 ```bash
-git clone https://github.com/jesus/commitdog.git
-cd commitdog
+git clone https://github.com/jesus/commitdog.git diffowl
+cd diffowl
 
 # Using pnpm (recommended)
 pnpm install && pnpm run build && pnpm link --global
@@ -52,15 +52,15 @@ When making edits to `src/**`, rebuild to update your globally linked CLI and gi
 ```bash
 pnpm run build
 git add -p
-commitdog review --staged
+diffowl review --staged
 ```
 
-### 3. Initialize CommitDog in Your Repository
+### 3. Initialize DiffOwl in Your Repository
 
-To set up CommitDog for your project, navigate to your target git repository and run:
+To set up DiffOwl for your project, navigate to your target git repository and run:
 
 ```bash
-commitdog init
+diffowl init
 ```
 
 This will:
@@ -68,16 +68,16 @@ This will:
 1. Start an OpenCode server (if not already running).
 2. Fetch your connected providers and active models.
 3. Allow you to select a model interactively.
-4. Generate a `.commitdog.yml` configuration file in the project root.
+4. Generate a `.diffowl.yml` configuration file in the project root.
 
 > [!IMPORTANT]
-> **Ensure OpenCode is configured first!** Before running `commitdog init`, make sure you have run the `opencode` CLI/UI at least once to authenticate and connect a provider (like GitHub Copilot, OpenAI, Ollama, etc.) with active models. If no active models are configured in OpenCode, the initialization command will fall back to a default configuration.
+> **Ensure OpenCode is configured first!** Before running `diffowl init`, make sure you have run the `opencode` CLI/UI at least once to authenticate and connect a provider (like GitHub Copilot, OpenAI, Ollama, etc.) with active models. If no active models are configured in OpenCode, the initialization command will fall back to a default configuration.
 
 ---
 
 ## CLI Reference
 
-### `commitdog` (or `commitdog review`)
+### `diffowl` (or `diffowl review`)
 
 Runs a code review on your repository.
 
@@ -88,58 +88,58 @@ Runs a code review on your repository.
 
 ```bash
 # Review last commit
-commitdog
+diffowl
 
 # Review staged files
-commitdog review --staged
+diffowl review --staged
 ```
 
-### `commitdog model`
+### `diffowl model`
 
 View or interactively change the active AI model.
 
 ```bash
 # Interactively pick a model
-commitdog model
+diffowl model
 
 # Manually set a model
-commitdog model opencode-go/big-pickle
+diffowl model opencode-go/big-pickle
 ```
 
-### `commitdog hook install | uninstall`
+### `diffowl hook install | uninstall`
 
 Installs or removes a managed post-commit Git hook that runs reviews automatically and asynchronously in the background.
 
 ```bash
 # Install non-blocking post-commit review hook
-commitdog hook install
+diffowl hook install
 
 # Uninstall the hook
-commitdog hook uninstall
+diffowl hook uninstall
 ```
 
-*Runs reviews asynchronously in the background via `nohup` (`--quick` mode enabled), saving execution output to `.commitdog/hook.log` and the latest report to `.commitdog/reviews/latest.md`. It returns control to your terminal instantly (ensuring `git commit` has zero delay) and avoids clobbering any existing post-commit hook scripts.*
+*Runs reviews asynchronously in the background via `nohup` (`--quick` mode enabled), saving execution output to `.diffowl/hook.log` and the latest report to `.diffowl/reviews/latest.md`. It returns control to your terminal instantly (ensuring `git commit` has zero delay) and avoids clobbering any existing post-commit hook scripts.*
 
-### `commitdog server start | stop | status`
+### `diffowl server start | stop | status`
 
 Manually manage the OpenCode server lifecycle.
 
 ```bash
 # Check if OpenCode serve is running
-commitdog server status
+diffowl server status
 
 # Start it manually
-commitdog server start
+diffowl server start
 
 # Stop the server
-commitdog server stop
+diffowl server stop
 ```
 
 ---
 
-## Configuration (`.commitdog.yml`)
+## Configuration (`.diffowl.yml`)
 
-Your `.commitdog.yml` configures everything for CommitDog in your project:
+Your `.diffowl.yml` configures everything for DiffOwl in your project:
 
 ```yaml
 # Model to use for reviews (provider/model)

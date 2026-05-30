@@ -2,7 +2,7 @@ import { mkdtemp, mkdir, readFile, writeFile, rm, realpath } from "node:fs/promi
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { loadConfig, saveConfig, type CommitDogConfig } from "./config.js";
+import { loadConfig, saveConfig, type DiffOwlConfig } from "./config.js";
 
 const originalCwd = process.cwd();
 let tempDirs: string[] = [];
@@ -15,12 +15,12 @@ afterEach(async () => {
 
 describe("config", () => {
   it("saves back to the discovered parent config", async () => {
-    const root = await mkdtemp(join(tmpdir(), "commitdog-config-"));
+    const root = await mkdtemp(join(tmpdir(), "diffowl-config-"));
     tempDirs.push(root);
     const child = join(root, "packages", "app");
     await mkdir(child, { recursive: true });
 
-    const parentConfig = join(root, ".commitdog.yml");
+    const parentConfig = join(root, ".diffowl.yml");
     await writeFile(
       parentConfig,
       [
@@ -39,7 +39,7 @@ describe("config", () => {
 
     process.chdir(child);
 
-    const config: CommitDogConfig = {
+    const config: DiffOwlConfig = {
       ...(await loadConfig()),
       model: "provider/updated",
     };
@@ -50,10 +50,10 @@ describe("config", () => {
   });
 
   it("defaults invalid min_confidence to medium", async () => {
-    const root = await mkdtemp(join(tmpdir(), "commitdog-config-"));
+    const root = await mkdtemp(join(tmpdir(), "diffowl-config-"));
     tempDirs.push(root);
     await writeFile(
-      join(root, ".commitdog.yml"),
+      join(root, ".diffowl.yml"),
       "model: provider/model\nmin_confidence: noisy\n",
       "utf-8",
     );
@@ -65,9 +65,9 @@ describe("config", () => {
   });
 
   it("reports malformed yaml instead of silently using defaults", async () => {
-    const root = await mkdtemp(join(tmpdir(), "commitdog-config-"));
+    const root = await mkdtemp(join(tmpdir(), "diffowl-config-"));
     tempDirs.push(root);
-    await writeFile(join(root, ".commitdog.yml"), "model: [broken", "utf-8");
+    await writeFile(join(root, ".diffowl.yml"), "model: [broken", "utf-8");
     process.chdir(root);
 
     await expect(loadConfig()).rejects.toThrow("Failed to load");

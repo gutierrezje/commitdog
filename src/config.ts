@@ -5,7 +5,7 @@ import { parse, stringify } from "yaml";
 
 export type ReviewConfidence = "low" | "medium" | "high";
 
-export interface CommitDogConfig {
+export interface DiffOwlConfig {
   model: string;
   server: {
     port: number;
@@ -18,7 +18,7 @@ export interface CommitDogConfig {
   rules: string[];
 }
 
-const DEFAULT_CONFIG: CommitDogConfig = {
+const DEFAULT_CONFIG: DiffOwlConfig = {
   model: "opencode-go/big-pickle",
   server: {
     port: 4096,
@@ -39,7 +39,7 @@ const DEFAULT_CONFIG: CommitDogConfig = {
   rules: [],
 };
 
-const CONFIG_FILENAME = ".commitdog.yml";
+const CONFIG_FILENAME = ".diffowl.yml";
 
 function validateTimeout(value: unknown): number {
   if (typeof value === "number" && Number.isInteger(value) && value > 0) {
@@ -68,14 +68,14 @@ function findConfigPath(): string {
   return join(process.cwd(), CONFIG_FILENAME);
 }
 
-export async function loadConfig(): Promise<CommitDogConfig> {
+export async function loadConfig(): Promise<DiffOwlConfig> {
   const configPath = findConfigPath();
   if (!existsSync(configPath)) {
     return { ...DEFAULT_CONFIG };
   }
   try {
     const raw = await readFile(configPath, "utf-8");
-    const parsed = parse(raw) as Partial<CommitDogConfig>;
+    const parsed = parse(raw) as Partial<DiffOwlConfig>;
     return {
       ...DEFAULT_CONFIG,
       ...parsed,
@@ -89,21 +89,21 @@ export async function loadConfig(): Promise<CommitDogConfig> {
   }
 }
 
-export async function saveConfig(config: CommitDogConfig): Promise<string> {
+export async function saveConfig(config: DiffOwlConfig): Promise<string> {
   const configPath = findConfigPath();
   const content = stringify(config, { lineWidth: 0 });
   await writeFile(configPath, content, "utf-8");
   return configPath;
 }
 
-export function getCommitDogDir(): string {
+export function getDiffOwlDir(): string {
   const configPath = findConfigPath();
   const projectRoot = dirname(configPath);
-  return join(projectRoot, ".commitdog");
+  return join(projectRoot, ".diffowl");
 }
 
-export async function ensureCommitDogDir(): Promise<string> {
-  const dir = getCommitDogDir();
+export async function ensureDiffOwlDir(): Promise<string> {
+  const dir = getDiffOwlDir();
   try {
     await access(dir);
   } catch {

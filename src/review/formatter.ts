@@ -3,7 +3,7 @@ import { writeFile, mkdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type { ReviewReport } from "../opencode/client.js";
-import { getCommitDogDir } from "../config.js";
+import { getDiffOwlDir } from "../config.js";
 
 /**
  * Render a structured review into the markdown format we persist.
@@ -40,7 +40,7 @@ export function renderMarkdown(report: ReviewReport): string {
  * Format and write the review output as a markdown file
  */
 export async function writeMarkdownReport(review: string): Promise<string> {
-  const dir = join(getCommitDogDir(), "reviews");
+  const dir = join(getDiffOwlDir(), "reviews");
   if (!existsSync(dir)) {
     await mkdir(dir, { recursive: true });
   }
@@ -49,7 +49,7 @@ export async function writeMarkdownReport(review: string): Promise<string> {
   const filename = `review-${timestamp}.md`;
   const filepath = join(dir, filename);
 
-  const content = `# CommitDog Review
+  const content = `# DiffOwl Review
 _${new Date().toLocaleString()}_
 
 ${review}
@@ -69,7 +69,7 @@ ${review}
  */
 export function printHeader(): void {
   console.log();
-  console.log(chalk.bold("commitdog") + chalk.dim(" reviewing..."));
+  console.log(chalk.bold("diffowl") + chalk.dim(" reviewing..."));
   console.log(chalk.dim("─".repeat(50)));
   console.log();
 }

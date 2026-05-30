@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { execa } from "execa";
 import { afterEach, describe, expect, it } from "vitest";
 import { buildReviewContext, renderReviewContext } from "./context.js";
-import type { CommitDogConfig } from "../config.js";
+import type { DiffOwlConfig } from "../config.js";
 
 const originalCwd = process.cwd();
 let tempDirs: string[] = [];
@@ -15,7 +15,7 @@ afterEach(async () => {
   tempDirs = [];
 });
 
-const config: CommitDogConfig = {
+const config: DiffOwlConfig = {
   model: "provider/model",
   server: {
     port: 4096,
@@ -30,7 +30,7 @@ const config: CommitDogConfig = {
 
 describe("buildReviewContext", () => {
   it("collects staged diff, changed file content, related tests, and reference hints", async () => {
-    const root = await mkdtemp(join(tmpdir(), "commitdog-context-"));
+    const root = await mkdtemp(join(tmpdir(), "diffowl-context-"));
     tempDirs.push(root);
     process.chdir(root);
 
@@ -56,9 +56,9 @@ describe("buildReviewContext", () => {
     await execa("git", ["add", "."]);
     await execa("git", [
       "-c",
-      "user.name=CommitDog Test",
+      "user.name=DiffOwl Test",
       "-c",
-      "user.email=commitdog@example.test",
+      "user.email=diffowl@example.test",
       "commit",
       "-m",
       "initial",
@@ -93,7 +93,7 @@ describe("buildReviewContext", () => {
   });
 
   it("reports partial reference search failures while keeping available references", async () => {
-    const root = await mkdtemp(join(tmpdir(), "commitdog-context-"));
+    const root = await mkdtemp(join(tmpdir(), "diffowl-context-"));
     tempDirs.push(root);
     process.chdir(root);
 
@@ -114,9 +114,9 @@ describe("buildReviewContext", () => {
     await execa("git", ["add", "."]);
     await execa("git", [
       "-c",
-      "user.name=CommitDog Test",
+      "user.name=DiffOwl Test",
       "-c",
-      "user.email=commitdog@example.test",
+      "user.email=diffowl@example.test",
       "commit",
       "-m",
       "initial",
@@ -147,7 +147,7 @@ describe("buildReviewContext", () => {
   });
 
   it("skips lockfiles when building prompt context", async () => {
-    const root = await mkdtemp(join(tmpdir(), "commitdog-context-"));
+    const root = await mkdtemp(join(tmpdir(), "diffowl-context-"));
     tempDirs.push(root);
     process.chdir(root);
 
@@ -157,9 +157,9 @@ describe("buildReviewContext", () => {
     await execa("git", ["add", "."]);
     await execa("git", [
       "-c",
-      "user.name=CommitDog Test",
+      "user.name=DiffOwl Test",
       "-c",
-      "user.email=commitdog@example.test",
+      "user.email=diffowl@example.test",
       "commit",
       "-m",
       "initial",
@@ -184,7 +184,7 @@ describe("buildReviewContext", () => {
   });
 
   it("renders a smaller quick context without related files or references", async () => {
-    const root = await mkdtemp(join(tmpdir(), "commitdog-context-"));
+    const root = await mkdtemp(join(tmpdir(), "diffowl-context-"));
     tempDirs.push(root);
     process.chdir(root);
 
@@ -205,9 +205,9 @@ describe("buildReviewContext", () => {
     await execa("git", ["add", "."]);
     await execa("git", [
       "-c",
-      "user.name=CommitDog Test",
+      "user.name=DiffOwl Test",
       "-c",
-      "user.email=commitdog@example.test",
+      "user.email=diffowl@example.test",
       "commit",
       "-m",
       "initial",
