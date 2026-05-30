@@ -92,7 +92,7 @@ describe("buildReviewContext", () => {
     expect(rendered).toContain("return value + 2");
   });
 
-  it("does not warn when ripgrep fails but git grep provides references", async () => {
+  it("reports partial reference search failures while keeping available references", async () => {
     const root = await mkdtemp(join(tmpdir(), "commitdog-context-"));
     tempDirs.push(root);
     process.chdir(root);
@@ -138,8 +138,9 @@ describe("buildReviewContext", () => {
       const rendered = renderReviewContext(context);
 
       expect(rendered).toContain("src/consumer.ts");
-      expect(context.diagnostics).toEqual([]);
-      expect(rendered).not.toContain("Context diagnostics");
+      expect(context.diagnostics[0]).toContain("Reference search with ripgrep failed");
+      expect(context.diagnostics[0]).toContain("Continuing with available reference results");
+      expect(rendered).toContain("Context diagnostics");
     } finally {
       process.env["PATH"] = originalPath;
     }

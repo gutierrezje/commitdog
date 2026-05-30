@@ -384,10 +384,10 @@ async function findBatchReferences(
   ]);
   const failures = outcomes.filter((outcome) => outcome.error);
 
-  if (failures.length === outcomes.length) {
-    for (const failure of failures) {
-      diagnostics.push(`Reference search with ${failure.label} failed: ${failure.error}.`);
-    }
+  for (const failure of failures) {
+    const suffix =
+      failures.length === outcomes.length ? "" : " Continuing with available reference results.";
+    diagnostics.push(`Reference search with ${failure.label} failed: ${failure.error}.${suffix}`);
   }
 
   const seen = new Set<string>();
@@ -463,6 +463,8 @@ async function findBatchReferencesWithRipgrep(
       "!node_modules/**",
       "--glob",
       "!dist/**",
+      "--glob",
+      "!.commitdog/**",
       "--glob",
       "!.git/**",
       "--glob",

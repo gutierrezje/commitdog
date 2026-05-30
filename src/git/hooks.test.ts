@@ -49,13 +49,23 @@ describe("installHook", () => {
 
 describe("generateManagedSection", () => {
   it("omits -x check and uses command -v directly for bare command names", () => {
-    const section = generateManagedSection({ commitdog: "commitdog" });
+    const section = generateManagedSection({
+      commitdog: "commitdog",
+      node: "/opt/node/bin/node",
+      cli: "/usr/local/lib/commitdog/dist/cli.js",
+      pathDirs: [],
+    });
     expect(section).not.toContain("[ -x 'commitdog' ]");
-    expect(section).toContain("command -v 'commitdog'");
+    expect(section).toContain("command -v commitdog");
   });
 
   it("includes -x check for absolute or relative paths with separators", () => {
-    const section = generateManagedSection({ commitdog: "/usr/local/bin/commitdog" });
+    const section = generateManagedSection({
+      commitdog: "/usr/local/bin/commitdog",
+      node: "/opt/node/bin/node",
+      cli: "/usr/local/lib/commitdog/dist/cli.js",
+      pathDirs: [],
+    });
     expect(section).toContain("[ -x '/usr/local/bin/commitdog' ]");
     expect(section).toContain("command -v commitdog");
   });
@@ -79,7 +89,15 @@ describe("generateManagedSection", () => {
     const scriptPath = join(root, "post-commit");
     await writeFile(
       scriptPath,
-      ["#!/bin/sh", generateManagedSection({ commitdog: "/missing/commitdog" })].join("\n"),
+      [
+        "#!/bin/sh",
+        generateManagedSection({
+          commitdog: "/missing/commitdog",
+          node: "/missing/node",
+          cli: "/missing/cli.js",
+          pathDirs: [],
+        }),
+      ].join("\n"),
       "utf-8",
     );
 

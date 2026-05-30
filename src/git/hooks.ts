@@ -232,9 +232,9 @@ function extractManagedSection(content: string): string | undefined {
 
 interface HookCommand {
   commitdog: string;
-  node?: string;
-  cli?: string;
-  pathDirs?: string[];
+  node: string;
+  cli: string;
+  pathDirs: string[];
 }
 
 async function resolveHookCommand(): Promise<HookCommand> {
@@ -319,39 +319,23 @@ ${generateManagedSection(command)}`;
 export function generateManagedSection(command: HookCommand): string {
   const isPath = command.commitdog.includes("/") || command.commitdog.includes("\\");
   const quotedCommitDog = shellQuote(command.commitdog);
-  const quotedNode = command.node ? shellQuote(command.node) : undefined;
-  const quotedCli = command.cli ? shellQuote(command.cli) : undefined;
-  const pathPrefix = command.pathDirs?.length ? command.pathDirs.join(":") : undefined;
+  const quotedNode = shellQuote(command.node);
+  const quotedCli = shellQuote(command.cli);
+  const pathPrefix = command.pathDirs.length ? command.pathDirs.join(":") : undefined;
+  const commitdogPathFallback = isPath
+    ? `elif [ -x ${quotedCommitDog} ]; then
+  ${quotedCommitDog} hook-run
+`
+    : "";
 
-  let runBlock = "";
-  if (quotedNode && quotedCli) {
-    runBlock = `if [ -x ${quotedNode} ] && [ -f ${quotedCli} ]; then
+  const runBlock = `if [ -x ${quotedNode} ] && [ -f ${quotedCli} ]; then
   ${quotedNode} ${quotedCli} hook-run
-elif [ -x ${quotedCommitDog} ]; then
-  ${quotedCommitDog} hook-run
-elif command -v commitdog >/dev/null 2>&1; then
+${commitdogPathFallback}elif command -v commitdog >/dev/null 2>&1; then
   commitdog hook-run
 else
   echo "commitdog: review not started; commitdog command not found or not executable; log: $COMMITDOG_LOG_FILE"
   echo "commitdog: review not started at $(date); commitdog command not found or not executable" >>"$COMMITDOG_LOG_FILE"
 fi`;
-  } else if (isPath) {
-    runBlock = `if [ -x ${quotedCommitDog} ]; then
-  ${quotedCommitDog} hook-run
-elif command -v commitdog >/dev/null 2>&1; then
-  commitdog hook-run
-else
-  echo "commitdog: review not started; commitdog command not found or not executable; log: $COMMITDOG_LOG_FILE"
-  echo "commitdog: review not started at $(date); commitdog command not found or not executable" >>"$COMMITDOG_LOG_FILE"
-fi`;
-  } else {
-    runBlock = `if command -v ${quotedCommitDog} >/dev/null 2>&1; then
-  ${quotedCommitDog} hook-run
-else
-  echo "commitdog: review not started; commitdog command not found or not executable; log: $COMMITDOG_LOG_FILE"
-  echo "commitdog: review not started at $(date); commitdog command not found or not executable" >>"$COMMITDOG_LOG_FILE"
-fi`;
-  }
 
   return `${HOOK_MARKER}
 # Run commitdog review in the background (non-blocking)
